@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { FaMessage, FaRegClock, FaUser, FaPlus } from 'react-icons/fa6';
 import NewChatModal from '@/components/NewChatModal';
+import api from '@/lib/api';
 
 interface Conversation {
     peer_id: string;
@@ -22,12 +23,12 @@ export default function MessagesDashboard() {
     useEffect(() => {
         const fetchConversations = async () => {
             try {
-                const response = await fetch('http://localhost:8000/api/messages');
-                const data = await response.json();
+                const response = await api.get('/messages');
+                const data = response.data;
 
                 // Fetch following list to map usernames AND for new chat suggestions
-                const followResponse = await fetch('http://localhost:8000/api/following');
-                const followData = await followResponse.json();
+                const followResponse = await api.get('/following');
+                const followData = followResponse.data;
                 const followingList = followData.following || [];
                 setFollowing(followingList);
 

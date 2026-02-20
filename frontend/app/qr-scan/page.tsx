@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FaQrcode, FaUserPlus, FaArrowLeft, FaCamera, FaSpinner, FaCircleCheck } from 'react-icons/fa6';
 import Link from 'next/link';
 import { useToast } from '@/components/Toast';
+import api from '@/lib/api';
 
 export default function QRScanPage() {
     const { showToast } = useToast();
@@ -24,26 +25,17 @@ export default function QRScanPage() {
             const formData = new FormData();
             formData.append('did', targetDid);
 
-            const response = await fetch('http://localhost:8000/api/contacts/add', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                setScannedPeer(data);
-                setSuccess(true);
-                // Redirect after a short delay
-                setTimeout(() => {
-                    router.push('/messages'); // Redirect to messages to start chatting? or profile?
-                }, 2000);
-            } else {
-                const error = await response.json();
-                showToast(error.detail || 'Failed to add contact', 'error');
-            }
-        } catch (error) {
+            const response = await api.post('/contacts/add', formData);
+            const data = response.data;
+            setScannedPeer(data);
+            setSuccess(true);
+            // Redirect after a short delay
+            setTimeout(() => {
+                router.push('/messages');
+            }, 2000);
+        } catch (error: any) {
             console.error('Connect error:', error);
-            showToast('Network error during scan', 'error');
+            showToast(error.response?.data?.detail || 'Failed to add contact', 'error');
         } finally {
             setIsConnecting(false);
         }

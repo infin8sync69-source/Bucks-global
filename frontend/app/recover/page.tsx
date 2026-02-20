@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FaShieldHalved, FaArrowLeft, FaSpinner, FaCircleCheck, FaUserGroup, FaIdCard } from 'react-icons/fa6';
 import Link from 'next/link';
 import { useToast } from '@/components/Toast';
+import api from '@/lib/api';
 
 export default function RecoverPage() {
     const { showToast } = useToast();
@@ -25,21 +26,12 @@ export default function RecoverPage() {
             formData.append('old_peer_id', oldPeerId);
             formData.append('new_peer_id', newPeerId);
 
-            const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-            const response = await fetch(`http://${host}:8000/api/recovery/request`, {
-                method: 'POST',
-                body: formData
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                setRequestId(data.request_id);
-                setStep(2);
-                showToast('Recovery request initiated!', 'success');
-            } else {
-                showToast('Recovery request failed. Check Peer IDs.', 'error');
-            }
-        } catch (error) {
+            const response = await api.post('/recovery/request', formData);
+            const data = response.data;
+            setRequestId(data.request_id);
+            setStep(2);
+            showToast('Recovery request initiated!', 'success');
+        } catch (error: any) {
             console.error('Recovery error:', error);
             showToast('Network error during recovery', 'error');
         } finally {
@@ -52,21 +44,15 @@ export default function RecoverPage() {
         try {
             // Simulator for guardian approvals
             // In a real app, this would poll the backend which waits for PubSub approvals
-            const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-            const response = await fetch(`http://${host}:8000/api/recovery/approve`, {
-                method: 'POST',
-                body: new URLSearchParams({
-                    'request_id': requestId,
-                    'guardian_peer_id': `mock_guardian_${approvals + 1}`
-                })
-            });
+            const response = await api.post('/recovery/approve', new URLSearchParams({
+                'request_id': requestId,
+                'guardian_peer_id': `mock_guardian_${approvals + 1}`
+            }));
 
-            if (response.ok) {
-                const data = await response.json();
-                setApprovals(data.approvals_count);
-                if (data.status === 'completed') {
-                    setStep(3);
-                }
+            const data = response.data;
+            setApprovals(data.approvals_count);
+            if (data.status === 'completed') {
+                setStep(3);
             }
         } catch (error) {
             console.error('Status check error:', error);

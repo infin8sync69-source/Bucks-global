@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import StoryCircles from '@/components/StoryCircles';
 import PostCard from '@/components/PostCard';
-import { LibraryItem, fetchAllInteractions } from '@/lib/api';
+import { LibraryItem, fetchAllInteractions, fetchAggregatedFeed, fetchFollowing } from '@/lib/api';
 import {
   FaFilter, FaListUl, FaImage, FaVideo, FaFileLines,
   FaCheck, FaChevronDown, FaArrowDownShortWide,
@@ -32,18 +32,15 @@ export default function Feed() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-        const [feedRes, followingRes, interactionsRes] = await Promise.all([
-          fetch(`http://${host}:8000/api/feed/aggregated`),
-          fetch(`http://${host}:8000/api/following`),
+        const [feedData, followingData, interactionsRes] = await Promise.all([
+          fetchAggregatedFeed(),
+          fetchFollowing(),
           fetchAllInteractions()
         ]);
 
-        const feedData = await feedRes.json();
-        const followingData = await followingRes.json();
-
         setLibrary(feedData.library || []);
-        setFollowing(followingData.following || []);
+        // extract peer IDs from the following records if they are objects, but actually let's map them safely
+        setFollowing((followingData || []).map((f: any) => f.following_peer_id || f));
         setInteractions(interactionsRes || {});
       } catch (error) {
         console.error('Failed to load feed data', error);

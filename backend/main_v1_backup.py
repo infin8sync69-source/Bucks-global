@@ -24,17 +24,11 @@ import hashlib
 from utils.crypto import generate_keypair, sign_message, verify_message, did_to_peer_id
 from utils.recovery import split_secret, combine_shards
 from utils.p2p import P2PClient
-from utils.ipfs_rpc import IPFSRPCClient
-from utils.social_dag import SocialDAG
-from utils.discovery import DiscoveryHub
 
 
 # Agent Service Removed
 # agent_service = AgentService()
 p2p_client = None
-rpc_client: Optional[IPFSRPCClient] = None
-social_dag: Optional[SocialDAG] = None
-discovery_hub: Optional[DiscoveryHub] = None
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -59,13 +53,7 @@ async def startup_event():
     init_db()
 
     # Initialize P2P Client
-    global p2p_client, rpc_client, social_dag
-    
-    # Global Scale Infrastructure
-    rpc_client = IPFSRPCClient()
-    social_dag = SocialDAG(rpc_client)
-    discovery_hub = DiscoveryHub(rpc_client, social_dag, get_db_connection)
-    
+    global p2p_client
     p2p_client = P2PClient(IPFS_BIN)
     
     # Get Peer ID (run in thread to avoid blocking)
@@ -77,14 +65,6 @@ async def startup_event():
         inbox_topic = f"/app/inbox/{my_peer_id}"
         await p2p_client.subscribe(inbox_topic, handle_inbox_message)
         print(f"Subscribed to P2P Inbox: {inbox_topic}")
-
-        # Global Discovery Subscriptions
-        await p2p_client.subscribe("/app/discovery", discovery_hub.handle_discovery_message)
-        await p2p_client.subscribe("/app/feed/updates", discovery_hub.handle_feed_update)
-        print("Subscribed to Global Discovery Topics")
-
-        # Start Periodic Heartbeat
-        asyncio.create_task(periodic_heartbeat())
         
     except Exception as e:
         print(f"Failed to initialize P2P: {e}")
@@ -146,22 +126,6 @@ def verify_signature(request: Request, secret: str = None) -> bool:
     except Exception as e:
         print(f"Auth error: {e}")
         return False
-
-async def periodic_heartbeat():
-    """Send a heartbeat to the discovery topic every minute."""
-    while True:
-        try:
-            conn = get_db_connection()
-            # For this demo/MVP, we use the first user in the table as 'self'
-            my_user = conn.execute("SELECT * FROM users LIMIT 1").fetchone()
-            conn.close()
-            
-            if my_user and discovery_hub:
-                user_data = dict(my_user)
-                await discovery_hub.send_heartbeat(user_data, user_data.get("dag_root"))
-        except Exception as e:
-            print(f"Heartbeat failed: {e}")
-        await asyncio.sleep(60)
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
@@ -394,20 +358,13 @@ async def generate_identity():
         
         # Store in DB
         conn = get_db_connection()
-        # Initialize Profile Root in DAG
-        default_profile = {
-            "username": username,
-            "handle": f"@{username.lower()}",
-            "avatar": avatar,
-            "bio": "New IPFS User",
-            "peer_id": did
-        }
-        dag_root = await social_dag.update_profile(default_profile)
-
+        # Ensure user exists
+        # We store the private key locally. 
+        # In a real app, this should be encrypted at rest!
         conn.execute("""
-            INSERT OR IGNORE INTO users (peer_id, username, handle, avatar, did, secret_key, dag_root) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (did, username, f"@{username.lower()}", avatar, did, secret, dag_root))
+            INSERT OR IGNORE INTO users (peer_id, username, handle, avatar, did, secret_key) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (did, username, f"@{username.lower()}", avatar, did, secret))
         conn.commit()
         conn.close()
         
@@ -415,8 +372,7 @@ async def generate_identity():
             "did": did, 
             "secret": secret,
             "username": username,
-            "avatar": avatar,
-            "dag_root": dag_root
+            "avatar": avatar
         }
     except Exception as e:
         print(f"Identity generation error: {e}")
@@ -484,37 +440,39 @@ async def get_user_profile(peer_id: str, request: Request):
 
 @app.get("/api/feed/user/{peer_id}")
 async def get_user_feed(peer_id: str, request: Request):
-    """Get aggregated feed for a specific user via Social DAG"""
+    """Get aggregated feed for a specific user"""
+    # 1. Check if it's me
     my_id = get_current_did(request)
-    
-    # 1. Resolve Peer's latest state via IPNS
-    # For Phase 1, we still fall back to local DB if available (for speed)
-    # but the primary source of truth is the DAG.
-    try:
-        raw_peer_id = peer_id.replace("did:ipfs:", "") if peer_id.startswith("did:ipfs:") else peer_id
-        resolved_cid = await rpc_client.name_resolve(raw_peer_id)
-        if resolved_cid:
-            # High-performance DAG Traversal
-            peer_library = await social_dag.traverse_feed(resolved_cid)
-            # Enrich
-            for item in peer_library:
-                item["_peer_id"] = peer_id
-                item["peer_id"] = peer_id
-            return {"library": peer_library, "count": len(peer_library), "source": "dag"}
-    except Exception as e:
-        print(f"DAG Feed fetch error: {e}")
-
-    # 2. Fallback to Local SQL (Legacy/Performance)
     if peer_id == my_id:
         conn = get_db_connection()
         posts = conn.execute("SELECT * FROM posts ORDER BY timestamp DESC").fetchall()
         library = [dict(post) for post in posts]
         conn.close()
+        
+        # Enrich with my ID
         for item in library:
             item["_peer_id"] = my_id
             item["peer_id"] = my_id
-        return {"library": library, "count": len(library), "source": "sql"}
+        return {"library": library, "count": len(library)}
 
+    # 2. Check if we follow them
+    conn = get_db_connection()
+    # Check following table for library_cid
+    peer_follow = conn.execute("SELECT * FROM following WHERE user_peer_id = ? AND following_peer_id = ?", (my_id, peer_id)).fetchone()
+    conn.close()
+    
+    if peer_follow and peer_follow["library_cid"]:
+        try:
+            peer_library = await fetch_peer_library(peer_follow["library_cid"])
+            # Enrich
+            for item in peer_library:
+                item["_peer_id"] = peer_id
+                item["peer_id"] = peer_id
+            return {"library": peer_library, "count": len(peer_library)}
+        except Exception as e:
+            print(f"Error fetching peer library: {e}")
+            return {"library": [], "count": 0}
+            
     return {"library": [], "count": 0}
 
 @app.post("/api/search")
@@ -664,17 +622,16 @@ async def upload_file(
             content = await file.read()
             f.write(content)
         
+        
         final_path = temp_path
 
-        # Add to IPFS via RPC Client
-        cid = await rpc_client.add(content)
+        # Add to IPFS
+        cid = run_command([IPFS_BIN, "add", "-Q", final_path])
         if not cid:
             raise HTTPException(status_code=500, detail="Failed to add file to IPFS")
         
-        # Pin to cluster (we might still need run_command for this, but specify API if needed)
-        try:
-            await run_command_async([CLUSTER_CTL, "pin", "add", cid])
-        except Exception: pass
+        # Pin to cluster
+        run_command([CLUSTER_CTL, "pin", "add", cid])
 
         thumbnail_cid = None
         if upload_type == "post" and file.filename.lower().endswith(".pdf"):
@@ -682,11 +639,9 @@ async def upload_file(
             try:
                 thumb_path = generate_pdf_thumbnail(temp_path)
                 if thumb_path and os.path.exists(thumb_path):
-                    with open(thumb_path, "rb") as tf:
-                        thumb_content = tf.read()
-                    thumbnail_cid = await rpc_client.add(thumb_content)
+                    thumbnail_cid = run_command([IPFS_BIN, "add", "-Q", thumb_path])
                     if thumbnail_cid:
-                        await run_command_async([CLUSTER_CTL, "pin", "add", thumbnail_cid])
+                        run_command([CLUSTER_CTL, "pin", "add", thumbnail_cid])
                     os.remove(thumb_path)
             except Exception as te:
                 print(f"Thumbnail generation failed: {te}")
@@ -733,53 +688,24 @@ async def upload_file(
                 entry_dict["avatar"],
                 entry_dict["timestamp"],
                 entry_dict["peer_id"],
+
                 "" # tag
             ))
-
-            # --- Global Scale DAG Integration ---
-            try:
-                # 1. Get current DAG root
-                user_row = c.execute("SELECT dag_root, username, handle, avatar, bio FROM users WHERE peer_id = ?", (did,)).fetchone()
-                if user_row:
-                    user_data = dict(user_row)
-                    old_dag_root = user_data.get("dag_root")
-                    
-                    # 2. Get the current feed head from the old DAG root
-                    prev_post_cid = None
-                    if old_dag_root:
-                        try:
-                            root_node = await rpc_client.dag_get(old_dag_root)
-                            prev_post_cid = root_node.get("feed_head")
-                        except: pass
-                    
-                    # 3. Create new Linked Post in DAG
-                    new_post_cid = await social_dag.create_post(entry_dict, prev_post_cid)
-                    
-                    # 4. Update Profile Root with new feed head
-                    profile_data = {
-                        "username": user_data["username"],
-                        "handle": user_data["handle"],
-                        "avatar": user_data["avatar"],
-                        "bio": user_data.get("bio", ""),
-                        "peer_id": did
-                    }
-                    new_dag_root = await social_dag.update_profile(profile_data, new_post_cid)
-                    
-                    # 5. Save new Root to DB
-                    c.execute("UPDATE users SET dag_root = ? WHERE peer_id = ?", (new_dag_root, did))
-                    print(f"Decentralized Feed Updated: {new_dag_root}")
-            except Exception as dag_err:
-                print(f"DAG Update failed: {dag_err}")
-
             conn.commit()
+            
+            # Regenerate library.json for IPNS publishing
+            posts = conn.execute("SELECT * FROM posts").fetchall()
+            library_list = [dict(p) for p in posts]
+            with open(LIBRARY_FILE, 'w') as f:
+                json.dump(library_list, f, indent=2)
             conn.close()
             
-            # Publish update via PubSub for real-time global discovery
-            await rpc_client.pubsub_pub("/app/feed/updates", json.dumps({
-                "peer_id": did,
-                "new_root": new_dag_root if 'new_dag_root' in locals() else None,
-                "timestamp": datetime.now().isoformat()
-            }))
+            # Publish library update to IPNS
+            abs_lib_path = os.path.abspath(LIBRARY_FILE)
+            lib_cid = run_command([IPFS_BIN, "add", "-Q", abs_lib_path])
+            if lib_cid:
+                run_command([CLUSTER_CTL, "pin", "add", lib_cid])
+                publish_to_ipns(lib_cid)
         
         # Cleanup
         if os.path.exists(temp_path):
@@ -1076,51 +1002,56 @@ async def follow_peer(peer_id: str, request: Request, relationship_type: str = "
             conn.close()
             return {"success": False, "message": "Already following this peer"}
         
-        # Strip did:ipfs: prefix if present for IPNS resolution
-        raw_peer_id = peer_id.replace("did:ipfs:", "") if peer_id.startswith("did:ipfs:") else peer_id
-        
-        # Resolve IPNS to get manifest / DAG Root
-        resolved_cid = await rpc_client.name_resolve(raw_peer_id)
+        # Resolve IPNS to get manifest/library CID
+        resolved_cid = await resolve_ipns(peer_id)
         if not resolved_cid:
             conn.close()
             raise HTTPException(status_code=404, detail="Could not resolve peer's IPNS name")
         
-        # Fetch DAG Root
-        try:
-            dag_node = await rpc_client.dag_get(resolved_cid)
-            if dag_node.get("type") == "profile_root":
-                library_cid = dag_node.get("feed_head")
-                username = dag_node.get("profile", {}).get("username", "Unknown")
-            else:
-                # Fallback to old format
-                library_cid = resolved_cid
-                username = "Unknown"
-        except:
-            library_cid = resolved_cid
-            username = "Unknown"
+        # Determine if it's a manifest or a library (version 1.0/1.1 support)
+        resolved_data = await fetch_ipfs_json(resolved_cid)
         
-        # Traverse and Pin top items
-        peer_library = []
-        if library_cid:
-            peer_library = await social_dag.traverse_feed(library_cid, limit=10)
-            for item in peer_library:
-                item_cid = item.get('cid', '')
-                if item_cid:
-                     await rpc_client.client.post(f"{rpc_client.base_url}/pin/add?arg={item_cid}")
+        library_cid = resolved_cid
+        vouched_cid = None
         
+        if isinstance(resolved_data, dict) and resolved_data.get("version") in ("1.0", "1.1"):
+            library_cid = resolved_data.get("library_cid")
+            vouched_cid = resolved_data.get("vouched_cid")
+        
+        # Fetch library
+        if not library_cid:
+             conn.close()
+             raise HTTPException(status_code=404, detail="Could not find library CID")
+        peer_library = await fetch_peer_library(library_cid)
+        
+        # Pin latest content
+        for item in peer_library[:10]:
+            item_cid = item.get('cid', item.get('id', ''))
+            if item_cid:
+                run_command([IPFS_BIN, "pin", "add", item_cid])
+        
+        # Resolve username: check users table first, then library author
+        username = "Unknown"
+        user_row = c.execute("SELECT username FROM users WHERE peer_id = ?", (peer_id,)).fetchone()
+        if user_row:
+            username = user_row["username"]
+        elif peer_library:
+            username = peer_library[0].get("author", "Unknown")
+            
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         c.execute("""
-            INSERT INTO following (user_peer_id, following_peer_id, relationship_type, timestamp, library_cid, username)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (my_peer_id, peer_id, relationship_type, timestamp, library_cid, username))
+            INSERT INTO following (user_peer_id, following_peer_id, relationship_type, timestamp, library_cid, vouched_cid, username)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (my_peer_id, peer_id, relationship_type, timestamp, library_cid, vouched_cid, username))
         conn.commit()
         conn.close()
         
         return {
             "success": True, 
-            "message": f"Now following {username} (DAG Root Synced)",
-            "synced_items": len(peer_library)
+            "message": f"Now following {username}",
+            "synced_items": len(peer_library[:10]),
+            "vouched_items_found": bool(vouched_cid)
         }
     except Exception as e:
         print(f"Follow error: {e}")
@@ -1137,14 +1068,8 @@ async def unfollow_peer(peer_id: str, request: Request):
     exists = c.execute("SELECT 1 FROM following WHERE user_peer_id = ? AND following_peer_id = ?", (my_peer_id, peer_id)).fetchone()
     
     if not exists:
-         # Try with raw peer_id fallback
-         raw_peer_id = peer_id.replace("did:ipfs:", "") if peer_id.startswith("did:ipfs:") else peer_id
-         exists_raw = c.execute("SELECT 1 FROM following WHERE user_peer_id = ? AND following_peer_id = ?", (my_peer_id, raw_peer_id)).fetchone()
-         if exists_raw:
-             peer_id = raw_peer_id
-         else:
-             conn.close()
-             raise HTTPException(status_code=404, detail="Not following this peer")
+         conn.close()
+         raise HTTPException(status_code=404, detail="Not following this peer")
          
     c.execute("DELETE FROM following WHERE user_peer_id = ? AND following_peer_id = ?", (my_peer_id, peer_id))
     conn.commit()
@@ -1335,9 +1260,9 @@ async def sync_peers(request: Request):
     return {"success": True, "synced_peers": synced_count}
 
 @app.get("/api/feed/aggregated")
-async def get_aggregated_feed(request: Request):
+async def get_aggregated_feed():
     """Get feed aggregated from own library + followed peers"""
-    my_peer_id = get_current_did(request)
+    my_peer_id = get_my_peer_id()
     conn = get_db_connection()
     c = conn.cursor()
     
@@ -1368,28 +1293,18 @@ async def get_aggregated_feed(request: Request):
     
     all_posts = list(my_posts)
     
-    # 4. Fetch followed content via Social DAG
+    # 4. Fetch followed content
     for peer in following:
         try:
-            peer_id = peer.get("following_peer_id")
-            # For Global Scale, we resolve the latest state from IPNS
-            # instead of relying on the 'library_cid' stored in our SQL DB
-            raw_peer_id = peer_id.replace("did:ipfs:", "") if peer_id.startswith("did:ipfs:") else peer_id
-            resolved_cid = await rpc_client.name_resolve(raw_peer_id)
-            if resolved_cid:
-                peer_library = await social_dag.traverse_feed(resolved_cid)
+            library_cid = peer.get("library_cid")
+            if library_cid:
+                peer_library = await fetch_peer_library(library_cid)
                 for item in peer_library:
                     item["_from_peer"] = peer.get("username", "Unknown")
-                    item["peer_id"] = peer_id
-                all_posts.extend(peer_library)
-            elif peer.get("library_cid"):
-                # Fallback to local SQL hint if IPNS resolution fails
-                peer_library = await social_dag.traverse_feed(peer["library_cid"])
-                for item in peer_library:
-                    item["_from_peer"] = peer.get("username", "Unknown")
-                    item["peer_id"] = peer_id
+                    item["peer_id"] = peer.get("following_peer_id")
                 all_posts.extend(peer_library)
         except Exception as e:
+            # print(f"Error fetching peer {peer.get('following_peer_id')}: {e}")
             pass
 
     # 5. Discovery & Privacy Filtering
@@ -1421,67 +1336,64 @@ async def get_aggregated_feed(request: Request):
     return {"library": filtered_posts, "count": len(filtered_posts)}
 
 @app.get("/api/feed/recommended")
-async def get_recommended_feed(request: Request):
+async def get_recommended_feed():
     """Aggregate posts recommended (socially vouched) by followed peers"""
     try:
-        my_peer_id = get_current_did(request)
+        my_peer_id = get_my_peer_id()
         conn = get_db_connection()
-        # 1. Get list of followed peers
-        following_rows = conn.execute("SELECT following_peer_id, username FROM following WHERE user_peer_id = ?", (my_peer_id,)).fetchall()
-        following_map = {r["following_peer_id"]: r["username"] for r in following_rows}
-        
-        if not following_map:
-            conn.close()
-            return {"library": [], "count": 0}
-            
-        followers_list = list(following_map.keys())
-        placeholders = ','.join('?' * len(followers_list))
-        
-        # 2. Get all posts liked by followed peers
-        likes_query = f"""
-            SELECT post_cid, user_peer_id 
-            FROM interactions 
-            WHERE type = 'like' AND user_peer_id IN ({placeholders})
-        """
-        likes = conn.execute(likes_query, followers_list).fetchall()
-        
-        # 3. Aggregate who liked what
-        recommendations = {} # cid -> list of usernames
-        for like in likes:
-            cid = like["post_cid"]
-            peer_id = like["user_peer_id"]
-            username = following_map.get(peer_id, "Unknown")
-            
-            if cid not in recommendations:
-                recommendations[cid] = []
-            if username not in recommendations[cid]:
-                recommendations[cid].append(username)
-                
-        if not recommendations:
-             conn.close()
-             return {"library": [], "count": 0}
-             
-        # 4. Fetch actual post data for the liked CIDs
-        cids_list = list(recommendations.keys())
-        cid_placeholders = ','.join('?' * len(cids_list))
-        
-        posts_query = f"""
-            SELECT id as cid, name, description, filename, type, author, avatar,
-                   timestamp, peer_id, size, is_pinned, content, visibility, 
-                   original_cid, tag
-            FROM posts
-            WHERE id IN ({cid_placeholders})
-        """
-        posts = conn.execute(posts_query, cids_list).fetchall()
+        following_rows = conn.execute("SELECT * FROM following WHERE user_peer_id = ?", (my_peer_id,)).fetchall()
+        following = [dict(r) for r in following_rows]
         conn.close()
         
         recommended_posts = []
-        for p in posts:
-            post_dict = dict(p)
-            post_dict["recommended_by"] = recommendations.get(post_dict["cid"], [])
-            recommended_posts.append(post_dict)
-            
-        # 5. Sort by number of recommendations (most popular first)
+        seen_cids = set()
+
+        for peer in following:
+            vouched_cid = peer.get("vouched_cid")
+            if not vouched_cid:
+                continue
+                
+            # Fetch the list of CIDs this peer recommended
+            vouched_list = await fetch_ipfs_json(vouched_cid)
+            if not isinstance(vouched_list, list):
+                continue
+                
+            # For each CID, fetch the actual post metadata
+            # We look for it in the peer's own library first, then global
+            peer_library = []
+            if peer.get("library_cid"):
+                peer_library = await fetch_peer_library(peer["library_cid"])
+                
+            for cid in vouched_list:
+                if cid in seen_cids:
+                    # Update recommendation count/list if already seen
+                    for post in recommended_posts:
+                        if post["cid"] == cid:
+                            if "recommended_by" not in post:
+                                post["recommended_by"] = []
+                            if peer["username"] not in post["recommended_by"]:
+                                post["recommended_by"].append(peer["username"])
+                    continue
+                
+                # Try to find post metadata in peer's library
+                post_meta = next((item for item in peer_library if item["cid"] == cid), None)
+                
+                # If not in library, it's a transitive recommendation (vouching for someone else)
+                # In a real app, we'd fetch the CID metadata from IPFS directly
+                # For now, we'll try to resolve it if it's missing
+                if not post_meta:
+                    # Logic to fetch CID metadata would go here
+                    # For MVP, we only surface if we can find the metadata
+                    continue
+                
+                # Attach social provenance
+                post_meta["recommended_by"] = [peer["username"]]
+                post_meta["_is_social_discovery"] = True
+                
+                recommended_posts.append(post_meta)
+                seen_cids.add(cid)
+                
+        # Sort by engagement/relevance (simple: count of recommendations)
         recommended_posts.sort(key=lambda x: len(x.get("recommended_by", [])), reverse=True)
         
         return {"library": recommended_posts, "count": len(recommended_posts)}
@@ -1559,45 +1471,10 @@ def get_chat_topic(peer_id: str) -> str:
     participants = sorted([my_id, peer_id])
     return f"ipfs-chat-v1-{participants[0][:10]}-{participants[1][:10]}"
 
-@app.get("/api/discovery")
-async def get_discovered_peers():
-    """Get registry of globally discovered peers and content"""
-    conn = get_db_connection()
-    peers = conn.execute("""
-        SELECT * FROM discovered_peers 
-        ORDER BY last_seen DESC 
-        LIMIT 50
-    """).fetchall()
-    conn.close()
-    
-    results = []
-    for p in peers:
-        peer_data = dict(p)
-        # Traverse the DAG to get the latest post preview if we have a dag_root
-        preview = None
-        if peer_data.get("dag_root"):
-            try:
-                # Stochastic traversal for preview
-                posts = await social_dag.traverse_feed(peer_data["dag_root"], limit=1)
-                if posts:
-                    preview = posts[0].get("name")
-            except: pass
-            
-        results.append({
-            "peer_id": peer_data["peer_id"],
-            "username": peer_data["username"] or f"User_{peer_data['peer_id'][:6]}",
-            "avatar": peer_data["avatar"] or "files/avatar_placeholder.png",
-            "last_seen": peer_data["last_seen"],
-            "latest_post_preview": preview,
-            "dag_root": peer_data["dag_root"]
-        })
-        
-    return {"discovered_peers": results, "count": len(results)}
-
 @app.get("/api/messages")
-async def list_conversations(request: Request):
+async def list_conversations():
     """List all active conversations"""
-    my_peer_id = get_current_did(request)
+    my_peer_id = get_my_peer_id()
     conn = get_db_connection()
     c = conn.cursor()
     
@@ -1645,9 +1522,9 @@ def get_network_info():
         return {"ip": "127.0.0.1"}
 
 @app.get("/api/messages/{peer_id}")
-async def get_chat_history(peer_id: str, request: Request):
+async def get_chat_history(peer_id: str):
     """Get chat history with a specific peer"""
-    my_peer_id = get_current_did(request)
+    my_peer_id = get_my_peer_id()
     conn = get_db_connection()
     
     query = """
@@ -1882,7 +1759,7 @@ async def add_contact(did: str = Form(...), request: Request = None):
         raise HTTPException(status_code=401, detail="Unauthorized")
         
     # Get my peer id
-    my_peer_id = my_did
+    my_peer_id = get_my_peer_id()
     
     # Resolve DID
     peer_id = did_to_peer_id(did)
@@ -2062,17 +1939,17 @@ async def get_guardians(request: Request):
                                    # Or DID? Key management... 
                                    # User profile file was keyed by DID.
                                    # But guardians table uses `user_peer_id`.
-                                   # I'll use DID.
-    peer_id = did
+                                   # I'll use get_my_peer_id().
+    peer_id = get_my_peer_id()
     conn = get_db_connection()
     guardians = conn.execute("SELECT guardian_peer_id FROM guardians WHERE user_peer_id = ?", (peer_id,)).fetchall()
     conn.close()
     return {"guardians": [g["guardian_peer_id"] for g in guardians]}
 
 @app.post("/api/guardians/add")
-async def add_guardian(peer_id: str = Form(...), request: Request = None):
+async def add_guardian(peer_id: str = Form(...)):
     """Add a guardian (max 7)"""
-    my_peer_id = get_current_did(request) if request else get_my_peer_id()
+    my_peer_id = get_my_peer_id()
     conn = get_db_connection()
     c = conn.cursor()
     

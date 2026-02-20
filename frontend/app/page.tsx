@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { FaMagnifyingGlass, FaPaperPlane } from 'react-icons/fa6';
 import StarField from '@/components/StarField';
+import api from '@/lib/api';
 
 interface Message {
     role: 'user' | 'assistant';
@@ -78,14 +79,8 @@ export default function Home() {
             }
 
             // Standard IPFS Search
-            const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-            const response = await fetch(`http://${host}:8000/api/search`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query })
-            });
-
-            const data = await response.json();
+            const response = await api.post('/search', { query });
+            const data = response.data;
             const results: SearchResult[] = data.results || [];
 
             let assistantResponse = '';

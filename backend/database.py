@@ -53,7 +53,8 @@ def init_db():
             bio TEXT,
             location TEXT,
             did TEXT,
-            secret_key TEXT
+            secret_key TEXT,
+            dag_root TEXT
         );
     """)
 
@@ -158,6 +159,17 @@ def init_db():
             is_read BOOLEAN DEFAULT 0
         );
     """)
+    # 11. Discovered Peers Table (Global Index)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS discovered_peers (
+            peer_id TEXT PRIMARY KEY,
+            username TEXT,
+            avatar TEXT,
+            dag_root TEXT,
+            last_seen TEXT,
+            discovery_type TEXT -- 'pubsub', 'sync', 'manual'
+        );
+    """)
     
     # 9.1 Migrations for Following Table (Add columns if missing)
     # Check if columns exist
@@ -176,6 +188,13 @@ def init_db():
     except sqlite3.OperationalError:
         print("Migrating users table...")
         c.execute("ALTER TABLE users ADD COLUMN secret_key TEXT")
+        
+    # 9.4 Migration for Users Table (Add dag_root)
+    try:
+        c.execute("SELECT dag_root FROM users LIMIT 1")
+    except sqlite3.OperationalError:
+        print("Migrating users table (adding dag_root)...")
+        c.execute("ALTER TABLE users ADD COLUMN dag_root TEXT")
         
     # 9.3 Migration for Posts Table (Encryption) - REMOVED
 

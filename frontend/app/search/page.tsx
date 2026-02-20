@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import SearchInput from '@/components/SearchInput';
 import Avatar from '@/components/Avatar';
-import { getIPFSUrl } from '@/lib/api';
+import api, { getIPFSUrl } from '@/lib/api';
 import { FaUser, FaFile, FaFileImage, FaFileVideo, FaFileAudio, FaSpinner, FaUsers, FaLayerGroup } from 'react-icons/fa6';
 import Link from 'next/link';
 
@@ -52,13 +52,8 @@ const SearchContent = () => {
         setLoading(true);
         setHasSearched(true);
         try {
-            const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-            const response = await fetch(`http://${host}:8000/api/search`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: searchQuery })
-            });
-            const data = await response.json();
+            const response = await api.post('/search', { query: searchQuery });
+            const data = response.data;
             setResults(data.results || []);
         } catch (error) {
             console.error("Search failed", error);

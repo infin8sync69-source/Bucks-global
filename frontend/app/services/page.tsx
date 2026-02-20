@@ -14,16 +14,16 @@ export default function Services() {
     const router = useRouter(); // Import useRouter
 
     const services = [
-        { icon: FaTaxi, label: 'Taxi', color: 'bg-yellow-100 text-yellow-600', locked: false, slug: 'taxi' },
-        { icon: FaBriefcase, label: 'Jobs', color: 'bg-blue-100 text-blue-600', locked: false, slug: 'jobs' },
-        { icon: FaUtensils, label: 'Foods', color: 'bg-orange-100 text-orange-600', locked: false, slug: 'foods' },
-        { icon: FaBagShopping, label: 'Shopping', color: 'bg-pink-100 text-pink-600', locked: false, slug: 'shopping' },
-        { icon: FaWallet, label: 'Pay', color: 'bg-purple-100 text-purple-600', locked: false, slug: 'pay' },
-        { icon: FaTicket, label: 'Book Tickets', color: 'bg-green-100 text-green-600', locked: false, slug: 'tickets' },
-        { icon: FaTruckFast, label: 'Delivery', color: 'bg-red-100 text-red-600', locked: false, slug: 'delivery' },
-        { icon: FaUsers, label: 'Community', color: 'bg-teal-100 text-teal-600', locked: false, slug: 'community' },
-        { icon: FaBuildingColumns, label: 'Banking', color: 'bg-indigo-100 text-indigo-600', locked: false, slug: 'banking' },
-        { icon: FaNetworkWired, label: 'Networks', color: 'bg-cyan-100 text-cyan-600', locked: false, slug: 'networks' },
+        { icon: FaTaxi, label: 'Taxi', gradient: 'from-amber-100 to-amber-200 text-amber-600', locked: true, slug: 'taxi' },
+        { icon: FaBriefcase, label: 'Jobs', gradient: 'from-blue-100 to-blue-200 text-blue-600', locked: true, slug: 'jobs' },
+        { icon: FaUtensils, label: 'Foods', gradient: 'from-orange-100 to-orange-200 text-orange-600', locked: true, slug: 'foods' },
+        { icon: FaBagShopping, label: 'Shopping', gradient: 'from-pink-100 to-pink-200 text-pink-600', locked: true, slug: 'shopping' },
+        { icon: FaWallet, label: 'Pay', gradient: 'from-purple-100 to-purple-200 text-purple-600', locked: true, slug: 'pay' },
+        { icon: FaTicket, label: 'Tickets', gradient: 'from-emerald-100 to-emerald-200 text-emerald-600', locked: true, slug: 'tickets' },
+        { icon: FaTruckFast, label: 'Delivery', gradient: 'from-red-100 to-red-200 text-red-600', locked: true, slug: 'delivery' },
+        { icon: FaUsers, label: 'Community', gradient: 'from-teal-100 to-teal-200 text-teal-600', locked: true, slug: 'community' },
+        { icon: FaBuildingColumns, label: 'Banking', gradient: 'from-indigo-100 to-indigo-200 text-indigo-600', locked: true, slug: 'banking' },
+        { icon: FaNetworkWired, label: 'Networks', gradient: 'from-cyan-100 to-cyan-200 text-cyan-600', locked: true, slug: 'networks' },
     ];
 
     const { showToast } = useToast();
@@ -79,20 +79,23 @@ export default function Services() {
                             onClick={() => handleServiceClick(service)}
                             className="flex flex-col items-center group cursor-pointer relative"
                         >
-                            <div className={`
-                                w-16 h-16 rounded-[1.5rem] flex items-center justify-center mb-2 shadow-sm transition-all duration-300
-                                ${service.color}
-                                group-hover:scale-105 group-hover:shadow-md
-                            `}>
-                                <service.icon className="text-2xl" />
+                            <div className="relative">
+                                <div className={`
+                                    w-16 h-16 rounded-[1.5rem] flex items-center justify-center mb-3 transition-all duration-300
+                                    bg-gradient-to-br ${service.gradient} shadow-lg shadow-gray-200/50
+                                    group-hover:scale-105 group-hover:-translate-y-1 relative overflow-hidden border border-white
+                                `}>
+                                    <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                    <service.icon className="text-2xl drop-shadow-sm z-10" />
+                                </div>
 
                                 {service.locked && (
-                                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-md border border-gray-100">
+                                    <div className="absolute -top-2 -right-2 w-7 h-7 bg-white/95 backdrop-blur-md rounded-full flex items-center justify-center shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-gray-100 z-20 group-hover:scale-110 transition-transform duration-300">
                                         <FaLock className="text-[10px] text-gray-400" />
                                     </div>
                                 )}
                             </div>
-                            <span className="text-[10px] font-bold text-center tracking-tight text-gray-500 group-hover:text-primary transition-colors">
+                            <span className="text-[11px] font-bold text-center tracking-tight text-gray-500 group-hover:text-primary transition-colors">
                                 {service.label}
                             </span>
                         </div>

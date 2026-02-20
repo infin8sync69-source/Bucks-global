@@ -197,6 +197,11 @@ export const fetchUserProfile = async (peer_id: string) => {
     return response.data;
 };
 
+export const fetchAggregatedFeed = async () => {
+    const response = await api.get<{ library: LibraryItem[] }>('/feed/aggregated');
+    return response.data;
+};
+
 export const fetchUserFeed = async (peer_id: string) => {
     const response = await api.get<{ library: LibraryItem[] }>(`/feed/user/${peer_id}`);
     return response.data.library;
