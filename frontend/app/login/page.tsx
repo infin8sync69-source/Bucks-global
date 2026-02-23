@@ -12,18 +12,38 @@ export default function LoginPage() {
     const [newIdentity, setNewIdentity] = useState<{ did: string; secret: string } | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const router = useRouter();
-
     const handleGenerate = async () => {
         setIsSaving(true);
         try {
-            // In a real DID system, this would happen in a Web Worker or library
-            // For now, we fetch a newly generated identity from the backend
-            const response = await fetch(`http://${window.location.hostname}:8000/api/auth/generate-identity`, {
-                method: 'POST'
-            });
-            const data = await response.json();
-            setNewIdentity(data);
-            setStep('generate');
+            // Check if we are running inside the standalone Bucks-browser environment
+            if (typeof window !== 'undefined' && window.bucksAPI) {
+                console.log("Using Native Electron IPC for Wallet Generation");
+                // The validateWalletSchema requires a password for wallet creation
+                // MVP: In a real app we'd prompt the user. 
+                const password = prompt("Provide a master password to encrypt your new Native Wallet:", "password123") || "password123";
+
+                const response = await window.bucksAPI.walletRPC({
+                    method: 'POST',
+                    endpoint: '/api/wallets/create',
+                    body: { password }
+                });
+
+                if (response && response.result) {
+                    // Response format will depend on the main.js implementation, mapping it to MVP expectations
+                    setNewIdentity({ did: response.result.publicKey, secret: "Encrypted in Main Process" });
+                    setStep('generate');
+                } else {
+                    throw new Error(response?.error || 'Unknown IPC Error');
+                }
+            } else {
+                console.warn("Native environment not detected. Falling back to decoupled backend for DID generation.");
+                const response = await fetch(`http://${window.location.hostname}:8000/api/auth/generate-identity`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                setNewIdentity(data);
+                setStep('generate');
+            }
         } catch (error) {
             console.error('Failed to generate identity', error);
             showToast('Error generating identity. Please try again.', 'error');
@@ -64,17 +84,41 @@ export default function LoginPage() {
         reader.onload = async (event) => {
             try {
                 const identity = JSON.parse(event.target?.result as string);
-                if (identity.did && identity.secret) {
-                    localStorage.setItem('bucks_peer_id', identity.did);
-                    localStorage.setItem('bucks_identity_secret', identity.secret);
-                    localStorage.setItem('isAuthenticated', 'true');
-                    showToast('Identity imported successfully!', 'success');
-                    router.push('/feed');
+
+                if (typeof window !== 'undefined' && window.bucksAPI) {
+                    console.log("Restoring Native Electron Wallet from JSON");
+                    // Assuming the identity file contains the data needed by the /api/wallets/restore endpoint
+                    // The main.js validate schema expects `mnemonic` for restore, but we might just pass the raw secret/key
+                    // MVP Implementation: Pass the parsed identity down to the main process
+                    const response = await window.bucksAPI.walletRPC({
+                        method: 'POST',
+                        endpoint: '/api/wallets/restore',
+                        body: { mnemonic: identity.secret || identity.mnemonic || JSON.stringify(identity) }
+                    });
+
+                    if (response && response.result) {
+                        localStorage.setItem('bucks_peer_id', response.result.publicKey || identity.did);
+                        localStorage.setItem('isAuthenticated', 'true');
+                        showToast('Native Identity imported successfully!', 'success');
+                        router.push('/feed');
+                    } else {
+                        throw new Error(response?.error || 'Restore failed');
+                    }
                 } else {
-                    showToast('Invalid identity file format.', 'error');
+                    // Fallback Web implementation
+                    if (identity.did && identity.secret) {
+                        localStorage.setItem('bucks_peer_id', identity.did);
+                        localStorage.setItem('bucks_identity_secret', identity.secret);
+                        localStorage.setItem('isAuthenticated', 'true');
+                        showToast('Identity imported successfully!', 'success');
+                        router.push('/feed');
+                    } else {
+                        showToast('Invalid identity file format.', 'error');
+                    }
                 }
             } catch (err) {
-                showToast('Failed to parse identity file.', 'error');
+                console.error("Import failed:", err);
+                showToast('Failed to parse or restore identity file.', 'error');
             }
         };
         reader.readAsText(file);
