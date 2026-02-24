@@ -797,6 +797,118 @@ async def upload_file(
         print(f"Upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+class RegisterContentReq(BaseModel):
+    cid: str
+    title: str = ""
+    description: str = ""
+    upload_type: str = "post"
+    visibility: str = "public"
+    thumbnail_cid: Optional[str] = None
+
+@app.post("/api/register_content")
+async def register_content(request: Request, body: RegisterContentReq):
+    """Register pre-pinned content from the native browser node into the DB and DAG"""
+    did = get_current_did(request)
+    
+    if len(body.title) > 200:
+        raise HTTPException(status_code=400, detail="Title too long (max 200 chars)")
+    if len(body.description) > 5000:
+        raise HTTPException(status_code=400, detail="Description too long (max 5000 chars)")
+        
+    try:
+        # Load user profile from DB
+        conn = get_db_connection()
+        user_profile = conn.execute("SELECT * FROM users WHERE peer_id = ?", (did,)).fetchone()
+        
+        if not user_profile:
+            user_profile = {"username": "Anonymous", "avatar": "files/avatar_placeholder.png"}
+        else:
+            user_profile = dict(user_profile)
+        
+        # Create library entry
+        entry_dict = {
+            "name": body.title or body.cid,
+            "description": body.description,
+            "filename": f"{body.cid}.file",
+            "cid": body.cid,
+            "thumbnail_cid": body.thumbnail_cid,
+            "type": "file",
+            "author": user_profile.get("username", "Anonymous"),
+            "avatar": user_profile.get("avatar", "files/avatar_placeholder.png"),
+            "peer_id": did,
+            "visibility": body.visibility, 
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        # Insert into DB
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO posts (id, name, description, filename, type, author, avatar, timestamp, peer_id, tag)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            entry_dict["cid"],
+            entry_dict["name"],
+            entry_dict["description"],
+            entry_dict["filename"],
+            entry_dict["type"],
+            entry_dict["author"],
+            entry_dict["avatar"],
+            entry_dict["timestamp"],
+            entry_dict["peer_id"],
+            ""
+        ))
+
+        # --- Global Scale DAG Integration ---
+        new_dag_root = None
+        try:
+            user_row = c.execute("SELECT dag_root, username, handle, avatar, bio FROM users WHERE peer_id = ?", (did,)).fetchone()
+            if user_row:
+                user_data = dict(user_row)
+                old_dag_root = user_data.get("dag_root")
+                
+                prev_post_cid = None
+                if old_dag_root:
+                    try:
+                        root_node = await rpc_client.dag_get(old_dag_root)
+                        prev_post_cid = root_node.get("feed_head")
+                    except: pass
+                
+                new_post_cid = await social_dag.create_post(entry_dict, prev_post_cid)
+                
+                profile_data = {
+                    "username": user_data["username"],
+                    "handle": user_data["handle"],
+                    "avatar": user_data["avatar"],
+                    "bio": user_data.get("bio", ""),
+                    "peer_id": did
+                }
+                new_dag_root = await social_dag.update_profile(profile_data, new_post_cid)
+                
+                c.execute("UPDATE users SET dag_root = ? WHERE peer_id = ?", (new_dag_root, did))
+        except Exception as dag_err:
+            print(f"DAG Update failed: {dag_err}")
+
+        conn.commit()
+        conn.close()
+        
+        # Publish update via PubSub
+        await rpc_client.pubsub_pub("/app/feed/updates", json.dumps({
+            "peer_id": did,
+            "new_root": new_dag_root,
+            "timestamp": datetime.now().isoformat()
+        }))
+        
+        return {
+            "success": True,
+            "cid": body.cid,
+            "thumbnail_cid": body.thumbnail_cid,
+            "upload_type": body.upload_type
+        }
+    
+    except Exception as e:
+        print(f"Register content error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/interactions")
 async def get_interactions():
     """Get all user interactions (Aggregated)"""

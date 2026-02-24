@@ -166,6 +166,39 @@ export const deleteComment = async (cid: string, index: number) => {
 };
 
 export const uploadFile = async (formData: FormData) => {
+    // If running inside the Bucks Electron App, intercept and use native publishing
+    if (typeof window !== 'undefined' && (window as any).bucksAPI?.ipfsPublish) {
+        try {
+            const file = formData.get('file') as File;
+            if (file) {
+                const title = (formData.get('title') as string) || file.name;
+                const description = (formData.get('description') as string) || '';
+                const type = (formData.get('upload_type') as string) || 'post';
+
+                // 1. Publish locally to embedded Helia
+                const arrayBuffer = await file.arrayBuffer();
+                const content = Array.from(new Uint8Array(arrayBuffer));
+                const metadata = { name: title, type, description };
+
+                const localPost = await (window as any).bucksAPI.ipfsPublish(content, metadata);
+
+                // 2. Register CID with global Python DAG
+                const registerRes = await api.post('/register_content', {
+                    cid: localPost.cid,
+                    title: title,
+                    description: description,
+                    upload_type: type,
+                    visibility: (formData.get('visibility') as string) || 'public',
+                    thumbnail_cid: null
+                });
+
+                return registerRes.data;
+            }
+        } catch (err) {
+            console.error('[Native IPFS] Failed to publish locally, falling back to HTTP server upload:', err);
+        }
+    }
+
     const response = await api.post<{ cid: string; filename: string; success: boolean }>('/upload', formData, {
         headers: {
             'Content-Type': 'multipart/form-data',
