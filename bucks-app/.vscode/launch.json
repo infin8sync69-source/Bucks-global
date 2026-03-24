@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Bucks Browser: Web /create",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:1420/create",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "bucks:dev-server"
+    },
+    {
+      "name": "Bucks Browser: Web /feed",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:1420/feed",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "bucks:dev-server"
+    }
+  ]
+}
