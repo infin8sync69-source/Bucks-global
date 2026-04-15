@@ -24,8 +24,11 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
                         if (profile.onboarding) {
                             router.push('/settings?onboarding=true');
                         }
-                    } catch (err) {
-                        console.error('Failed to fetch profile during auth check', err);
+                    } catch (err: any) {
+                        // Network errors mean backend is offline — not an auth failure, skip silently
+                        if (err?.code !== 'ERR_NETWORK' && err?.message !== 'Network Error') {
+                            console.error('Failed to fetch profile during auth check', err);
+                        }
                     }
                 }
             } else {

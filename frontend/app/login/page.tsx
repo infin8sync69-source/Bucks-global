@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { FaIdCard, FaFileImport, FaCircleCheck, FaDownload, FaArrowRight, FaFingerprint } from 'react-icons/fa6';
 import Link from 'next/link';
 import { useToast } from '@/components/Toast';
-import { getApiBaseUrl } from '@/lib/api';
 
 export default function LoginPage() {
     const { showToast } = useToast();
@@ -37,10 +36,9 @@ export default function LoginPage() {
                     throw new Error(response?.error || 'Unknown IPC Error');
                 }
             } else {
-                console.warn("Native environment not detected. Falling back to decoupled backend for DID generation.");
-                const response = await fetch(`${getApiBaseUrl()}/auth/generate-identity`, {
-                    method: 'POST'
-                });
+                // Use the built-in Next.js API route — works without any backend
+                const response = await fetch('/api/auth/generate-identity', { method: 'POST' });
+                if (!response.ok) throw new Error('Identity generation failed');
                 const data = await response.json();
                 setNewIdentity(data);
                 setStep('generate');

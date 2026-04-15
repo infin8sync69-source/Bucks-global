@@ -27,6 +27,7 @@ function FeedContent() {
   const [sortBy, setSortBy] = useState<'newest' | 'popular'>('newest');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [interactions, setInteractions] = useState<any>({});
+  const [backendOffline, setBackendOffline] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -40,8 +41,12 @@ function FeedContent() {
         setLibrary(feedData.library || []);
         setFollowing((followingData || []).map((f: any) => f.following_peer_id || f));
         setInteractions(interactionsRes || {});
-      } catch (error) {
-        console.error('Failed to load feed data', error);
+      } catch (error: any) {
+        if (error?.code === 'ERR_NETWORK' || error?.message === 'Network Error') {
+          setBackendOffline(true);
+        } else {
+          console.error('Failed to load feed data', error);
+        }
       } finally {
         setLoading(false);
       }
@@ -208,7 +213,17 @@ function FeedContent() {
           </div>
         )}
 
-        {filteredLibrary.length === 0 ? (
+        {backendOffline && (
+          <div className="mx-4 mt-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start space-x-3">
+            <span className="text-xl">📡</span>
+            <div>
+              <p className="text-sm font-bold text-amber-800">Backend node is offline</p>
+              <p className="text-xs text-amber-600 mt-0.5">Content will appear once your node is running. You can still create an identity and browse local content.</p>
+            </div>
+          </div>
+        )}
+
+        {filteredLibrary.length === 0 && !backendOffline ? (
           <div className="text-center py-20 bg-white m-4 rounded-3xl border border-dashed border-gray-200">
             <div className="text-4xl mb-4">🛸</div>
             <h3 className="text-gray-900 font-bold">No content found</h3>

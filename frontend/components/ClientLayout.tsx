@@ -17,7 +17,12 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     React.useEffect(() => {
         // Fetch profile once on mount to populate localStorage cache
         if (typeof window !== 'undefined' && localStorage.getItem('bucks_peer_id')) {
-            fetchProfile().catch(console.error);
+            fetchProfile().catch((err: any) => {
+                // Silently ignore network errors (backend offline) — not actionable for the user
+                if (err?.code !== 'ERR_NETWORK' && err?.message !== 'Network Error') {
+                    console.error('Profile prefetch failed', err);
+                }
+            });
         }
     }, [pathname]);
 
