@@ -5,13 +5,17 @@ import { generateKeyPairSync } from 'crypto';
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 function base58Encode(bytes: Uint8Array): string {
-    let num = BigInt('0x' + Buffer.from(bytes).toString('hex') || '0');
+    const hex = Buffer.from(bytes).toString('hex');
+    let num = BigInt(hex ? '0x' + hex : '0');
     if (bytes.length === 0) return '';
 
+    const ZERO = BigInt(0);
+    const FIFTY_EIGHT = BigInt(58);
+
     let result = '';
-    while (num > 0n) {
-        result = BASE58_ALPHABET[Number(num % 58n)] + result;
-        num = num / 58n;
+    while (num > ZERO) {
+        result = BASE58_ALPHABET[Number(num % FIFTY_EIGHT)] + result;
+        num = num / FIFTY_EIGHT;
     }
     // Leading zero bytes → leading '1's
     for (const byte of bytes) {
