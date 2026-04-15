@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { FaMagnifyingGlass, FaPaperPlane } from 'react-icons/fa6';
 import StarField from '@/components/StarField';
 import api from '@/lib/api';
@@ -22,6 +23,7 @@ interface SearchResult {
 }
 
 export default function Home() {
+    const router = useRouter();
     const [query, setQuery] = useState('');
     const [messages, setMessages] = useState<Message[]>([
         {
@@ -46,6 +48,8 @@ export default function Home() {
 
     if (!mounted) return null; // Avoid hydration mismatch for dynamic content
 
+    const showCommandHints = query.startsWith('/') && !isSearching;
+
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!query.trim()) return;
@@ -63,6 +67,12 @@ export default function Home() {
         try {
             // Check for Agent Commands (starting with /)
             if (query.startsWith('/')) {
+                // Handle local navigation commands
+                const cmd = query.trim().toLowerCase();
+                if (cmd === '/feed') { router.push('/feed'); return; }
+                if (cmd === '/profile') { router.push('/profile'); return; }
+                if (cmd === '/upload') { router.push('/create'); return; }
+
                 // Import dynamically to avoid server-side issues if any
                 const { fetchAgentResponse } = await import('@/lib/api');
                 const responseText = await fetchAgentResponse(query);
@@ -183,6 +193,30 @@ export default function Home() {
                     )}
                     <div ref={messagesEndRef} />
                 </div>
+
+                {/* Command Hints Panel */}
+                {showCommandHints && (
+                  <div className="mb-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-3 space-y-1">
+                    <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest px-2 mb-2">Commands</p>
+                    {[
+                      { cmd: '/feed', desc: 'Go to your content feed' },
+                      { cmd: '/search [query]', desc: 'Search content on the swarm' },
+                      { cmd: '/profile', desc: 'Open your profile' },
+                      { cmd: '/upload', desc: 'Upload a new file' },
+                      { cmd: '/peers', desc: 'List connected peers' },
+                    ].filter(c => c.cmd.startsWith(query) || query === '/').map(c => (
+                      <button
+                        key={c.cmd}
+                        type="button"
+                        onClick={() => setQuery(c.cmd + ' ')}
+                        className="w-full flex items-center space-x-3 px-3 py-2 rounded-xl hover:bg-white/10 transition-colors text-left group"
+                      >
+                        <span className="text-primary font-mono text-sm font-bold">{c.cmd}</span>
+                        <span className="text-white/40 text-xs">{c.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Search Input */}
                 <form onSubmit={handleSearch} className="relative group">

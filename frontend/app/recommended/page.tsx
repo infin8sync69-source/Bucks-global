@@ -11,6 +11,7 @@ export default function Recommended() {
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<'all' | 'trending' | 'posts' | 'videos'>('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const [visibleCount, setVisibleCount] = useState(10);
 
     useEffect(() => {
         const loadRecommended = async () => {
@@ -102,13 +103,16 @@ export default function Recommended() {
                     </div>
                 ) : (
                     <>
-                        {filteredLibrary.map((item) => (
+                        {filteredLibrary.slice(0, visibleCount).map((item) => (
                             <PostCard key={item.cid} item={item} />
                         ))}
 
-                        {filteredLibrary.length > 5 && (
+                        {filteredLibrary.length > visibleCount && (
                             <div className="p-6 text-center">
-                                <button className="px-8 py-2.5 border-2 border-primary text-primary rounded-full text-sm font-bold hover:bg-primary/5 transition-colors">
+                                <button
+                                    onClick={() => setVisibleCount(c => c + 10)}
+                                    className="px-8 py-2.5 border-2 border-primary text-primary rounded-full text-sm font-bold hover:bg-primary/5 transition-colors"
+                                >
                                     See more
                                 </button>
                             </div>

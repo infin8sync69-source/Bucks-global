@@ -10,6 +10,7 @@ import { fetchProfile, updateProfile, uploadFile, logout, UserProfile, getIPFSUr
 import { useToast } from '@/components/Toast';
 import Avatar from '@/components/Avatar';
 import InviteQR from '@/components/InviteQR';
+import GuardianManager from '@/components/GuardianManager';
 
 const SettingsPage = () => {
     const router = useRouter();
@@ -20,6 +21,7 @@ const SettingsPage = () => {
     const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'network'>('profile');
 
     const [isOnboarding, setIsOnboarding] = useState(false);
+    const [showGuardians, setShowGuardians] = useState(false);
 
     // Form states
     const [username, setUsername] = useState('');
@@ -312,13 +314,18 @@ const SettingsPage = () => {
                                     <div className="space-y-4">
                                         <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 flex items-center justify-between">
                                             <div className="flex items-center">
-                                                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center text-green-600 mr-4 font-bold">7</div>
+                                                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center text-green-600 mr-4 font-bold">0</div>
                                                 <div>
                                                     <h3 className="text-gray-900 font-bold">Active Guardians</h3>
-                                                    <p className="text-gray-500 text-xs mt-0.5">Threshold: 4 / 7 approvals required</p>
+                                                    <p className="text-gray-500 text-xs mt-0.5">Manage trusted contacts for identity recovery</p>
                                                 </div>
                                             </div>
-                                            <button className="text-primary hover:underline text-sm font-bold">Manage</button>
+                                            <button
+                                                onClick={() => setShowGuardians(v => !v)}
+                                                className="text-primary hover:underline text-sm font-bold"
+                                            >
+                                                Manage
+                                            </button>
                                         </div>
 
                                         <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 flex items-center justify-between">
@@ -328,12 +335,29 @@ const SettingsPage = () => {
                                                 </div>
                                                 <div>
                                                     <h3 className="text-gray-900 font-bold">DID Identity</h3>
-                                                    <p className="text-gray-500 text-xs mt-0.5 font-mono truncate max-w-[150px]">did:key:z6MkpTHR...v4E</p>
+                                                    <p className="text-gray-500 text-xs mt-0.5 font-mono truncate max-w-[150px]">
+                                                        {(() => {
+                                                            const did = profile?.did || profile?.peer_id || '';
+                                                            return did ? `${did.slice(0, 8)}...${did.slice(-6)}` : 'Not set';
+                                                        })()}
+                                                    </p>
                                                 </div>
                                             </div>
-                                            <button className="text-primary hover:underline text-sm font-bold">Copy</button>
+                                            <button
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(profile?.did || profile?.peer_id || '');
+                                                    showToast('DID copied to clipboard', 'success');
+                                                }}
+                                                className="text-primary hover:underline text-sm font-bold"
+                                            >
+                                                Copy
+                                            </button>
                                         </div>
                                     </div>
+
+                                    {showGuardians && (
+                                        <GuardianManager onClose={() => setShowGuardians(false)} />
+                                    )}
                                 </div>
                             </div>
                         )}
