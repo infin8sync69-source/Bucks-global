@@ -117,6 +117,10 @@ const PostCard = ({ item, interactions: initialInteractions, onPostDeleted, onPo
         setIsEditing(false);
     };
 
+    // Ownership — only the author can edit/delete their own posts
+    const isOwner = typeof window !== 'undefined' &&
+        localStorage.getItem('bucks_peer_id') === (item.peer_id || item.author);
+
     // For username synchronization: check if this is the current user
     const [authorName, setAuthorName] = useState(item.author);
     const [authorAvatar, setAuthorAvatar] = useState(item.avatar);
@@ -226,13 +230,24 @@ const PostCard = ({ item, interactions: initialInteractions, onPostDeleted, onPo
                                     <FaShare className="text-xs text-secondary" />
                                     <span>Share Post</span>
                                 </button>
-                                <button
-                                    onClick={handleDelete}
-                                    className="flex items-center space-x-3 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                                >
-                                    <FaTrash className="text-xs" />
-                                    <span>Delete Post</span>
-                                </button>
+                                {isOwner && (
+                                    <>
+                                        <button
+                                            onClick={handleEdit}
+                                            className="flex items-center space-x-3 w-full px-4 py-2.5 text-sm text-foreground hover:bg-gray-50 transition-colors"
+                                        >
+                                            <FaPen className="text-xs text-secondary" />
+                                            <span>Edit Post</span>
+                                        </button>
+                                        <button
+                                            onClick={handleDelete}
+                                            className="flex items-center space-x-3 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                        >
+                                            <FaTrash className="text-xs" />
+                                            <span>Delete Post</span>
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         )}
                     </div>

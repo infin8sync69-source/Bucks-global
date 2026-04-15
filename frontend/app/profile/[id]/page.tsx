@@ -1,9 +1,8 @@
 import React from 'react';
 import UserProfilePageClient from './UserProfilePageClient';
 
-export function generateStaticParams() {
-    return [{ id: "default" }];
-}
+// Render on-demand for any user ID
+export const dynamic = 'force-dynamic';
 
 export default function UserProfilePage() {
     return <UserProfilePageClient />;

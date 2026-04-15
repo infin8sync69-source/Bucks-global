@@ -1,0 +1,1694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bucks Global — Prototype</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #060608;
+    --surface: rgba(255,255,255,0.04);
+    --surface-2: rgba(255,255,255,0.07);
+    --border: rgba(255,255,255,0.08);
+    --border-2: rgba(255,255,255,0.14);
+    --text: #f4f4f6;
+    --text-muted: rgba(255,255,255,0.45);
+    --text-dim: rgba(255,255,255,0.22);
+    --blue: #3b82f6;
+    --blue-glow: rgba(59,130,246,0.25);
+    --purple: #a855f7;
+    --green: #22c55e;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --radius: 20px;
+    --radius-sm: 12px;
+    --radius-xs: 8px;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; overflow: hidden; }
+
+  /* ─── SWARM CANVAS BG ─── */
+  .swarm-bg {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: radial-gradient(ellipse 80% 60% at 20% 10%, rgba(59,130,246,0.07) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 80%, rgba(168,85,247,0.06) 0%, transparent 55%),
+                radial-gradient(ellipse 50% 50% at 50% 50%, rgba(34,197,94,0.03) 0%, transparent 70%);
+  }
+  .swarm-bg canvas { width: 100%; height: 100%; opacity: 0.35; }
+
+  /* ─── LAYOUT ─── */
+  .shell { position: relative; z-index: 1; height: 100vh; display: flex; flex-direction: column; }
+
+  /* ─── FLOATING HEADER ─── */
+  .header {
+    position: fixed; top: 20px; left: 0; right: 0; z-index: 200;
+    padding: 0 24px;
+  }
+  .header-island {
+    max-width: 1100px; margin: 0 auto;
+    display: flex; align-items: center; gap: 12px;
+    height: 60px; padding: 0 16px;
+    background: rgba(8,8,12,0.85);
+    backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 28px;
+    box-shadow: 0 20px 60px -15px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  .header-btn {
+    width: 36px; height: 36px; border-radius: 12px; border: none;
+    background: transparent; color: var(--text-muted); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 16px;
+    transition: all 0.2s; flex-shrink: 0;
+  }
+  .header-btn:hover { background: rgba(255,255,255,0.08); color: white; }
+  .header-btn.active { background: rgba(59,130,246,0.15); color: var(--blue); }
+
+  .omnibox {
+    flex: 1; height: 36px; background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.06); border-radius: 14px;
+    display: flex; align-items: center; padding: 0 14px; gap: 8px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .omnibox:hover { border-color: rgba(59,130,246,0.3); background: rgba(0,0,0,0.6); }
+  .omnibox span { font-size: 12px; color: var(--text-dim); font-weight: 500; letter-spacing: 0.04em; }
+
+  .nav-tabs { display: flex; gap: 4px; align-items: center; }
+  .nav-tab {
+    height: 30px; padding: 0 14px; border-radius: 10px;
+    border: 1px solid transparent; background: transparent;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--text-dim); cursor: pointer; transition: all 0.2s; white-space: nowrap;
+  }
+  .nav-tab:hover { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+  .nav-tab.active { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.14); color: white; }
+
+  .wallet-chip {
+    height: 30px; padding: 0 12px; border-radius: 10px;
+    background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2);
+    color: var(--blue); font-size: 10px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .wallet-chip:hover { background: rgba(59,130,246,0.18); }
+  .wallet-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); animation: pulse 2s infinite; }
+
+  /* ─── PAGES ─── */
+  .page { display: none; height: 100vh; overflow-y: auto; padding-top: 100px; padding-bottom: 40px; }
+  .page.active { display: block; }
+  .page-inner { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+  /* ─── SCROLLBAR ─── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+  /* ─── GLASS CARD ─── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px;
+  }
+  .card-sm { border-radius: var(--radius-sm); padding: 16px; }
+
+  /* ─── BUTTON ─── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px 20px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-2); background: var(--surface-2);
+    color: var(--text); font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s; text-decoration: none;
+  }
+  .btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+  .btn-primary { background: var(--blue); border-color: rgba(59,130,246,0.5); color: white; }
+  .btn-primary:hover { background: #2563eb; box-shadow: 0 0 20px rgba(59,130,246,0.3); }
+  .btn-ghost { background: transparent; border-color: var(--border); color: var(--text-muted); }
+  .btn-ghost:hover { background: var(--surface); color: white; }
+  .btn-sm { padding: 6px 12px; font-size: 11px; border-radius: 8px; }
+  .btn-icon { width: 36px; height: 36px; padding: 0; border-radius: 10px; }
+
+  /* ─── BADGE ─── */
+  .badge {
+    display: inline-flex; align-items: center; padding: 3px 8px;
+    border-radius: 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  }
+  .badge-blue { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
+  .badge-purple { background: rgba(168,85,247,0.15); color: var(--purple); }
+  .badge-amber { background: rgba(245,158,11,0.15); color: var(--amber); }
+
+  /* ─── STATUS DOT ─── */
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot-green { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .dot-blue { background: var(--blue); box-shadow: 0 0 8px var(--blue); }
+  .dot-amber { background: var(--amber); }
+  .dot-dim { background: rgba(255,255,255,0.2); }
+
+  /* ─── INPUT ─── */
+  .input {
+    width: 100%; padding: 10px 14px; border-radius: var(--radius-sm);
+    background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+    color: var(--text); font-size: 13px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .input:focus { border-color: rgba(59,130,246,0.5); }
+  .input::placeholder { color: var(--text-dim); }
+  textarea.input { resize: none; font-family: inherit; line-height: 1.6; }
+
+  /* ─── AVATAR ─── */
+  .avatar {
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; text-transform: uppercase; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+  }
+  .avatar-sm { width: 32px; height: 32px; font-size: 11px; }
+  .avatar-md { width: 44px; height: 44px; font-size: 14px; }
+  .avatar-lg { width: 72px; height: 72px; font-size: 22px; }
+  .avatar-xl { width: 96px; height: 96px; font-size: 28px; }
+
+  /* ─── DIVIDER ─── */
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+  /* ─── GRID ─── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .feed-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; }
+
+  /* ─── FLEX UTILS ─── */
+  .flex { display: flex; }
+  .flex-col { flex-direction: column; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  .gap-4 { gap: 4px; }
+  .gap-8 { gap: 8px; }
+  .gap-12 { gap: 12px; }
+  .gap-16 { gap: 16px; }
+  .gap-20 { gap: 20px; }
+
+  /* ─── TYPOGRAPHY ─── */
+  .text-xs { font-size: 11px; }
+  .text-sm { font-size: 12px; }
+  .text-base { font-size: 14px; }
+  .text-lg { font-size: 17px; }
+  .text-xl { font-size: 22px; }
+  .text-2xl { font-size: 28px; }
+  .text-muted { color: var(--text-muted); }
+  .text-dim { color: var(--text-dim); }
+  .text-blue { color: var(--blue); }
+  .text-green { color: var(--green); }
+  .text-purple { color: var(--purple); }
+  .text-amber { color: var(--amber); }
+  .text-red { color: var(--red); }
+  .font-bold { font-weight: 700; }
+  .font-black { font-weight: 900; }
+  .uppercase { text-transform: uppercase; letter-spacing: 0.08em; }
+  .mb-4 { margin-bottom: 4px; }
+  .mb-8 { margin-bottom: 8px; }
+  .mb-12 { margin-bottom: 12px; }
+  .mb-16 { margin-bottom: 16px; }
+  .mb-20 { margin-bottom: 20px; }
+  .mb-24 { margin-bottom: 24px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .mt-16 { margin-top: 16px; }
+  .mt-20 { margin-top: 20px; }
+
+  /* ─── ANIMATIONS ─── */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .animate-pulse { animation: pulse 2s infinite; }
+  .animate-spin { animation: spin 1s linear infinite; display: inline-block; }
+  .fade-in { animation: fadeIn 0.3s ease; }
+
+  /* ─── POST CARD ─── */
+  .post-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 12px;
+    transition: all 0.2s; cursor: pointer;
+  }
+  .post-card:hover { border-color: var(--border-2); background: var(--surface-2); }
+  .post-media {
+    width: 100%; border-radius: var(--radius-sm); margin: 12px 0;
+    background: rgba(0,0,0,0.4); border: 1px solid var(--border);
+    height: 220px; display: flex; align-items: center; justify-content: center;
+    font-size: 40px; position: relative; overflow: hidden;
+  }
+  .post-media-label {
+    position: absolute; bottom: 10px; left: 12px;
+    font-size: 10px; font-weight: 700; color: var(--text-muted);
+    background: rgba(0,0,0,0.6); padding: 3px 8px; border-radius: 6px;
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .post-actions { display: flex; gap: 4px; margin-top: 12px; }
+  .action-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 9px;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-muted); font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .action-btn:hover { background: var(--surface-2); color: white; }
+  .action-btn.liked { background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.3); color: var(--blue); }
+  .action-btn.vouched { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.25); color: var(--green); }
+
+  /* ─── SIDEBAR WIDGET ─── */
+  .widget { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; }
+  .widget-title { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.15em; color: var(--text-muted); margin-bottom: 14px; }
+
+  /* ─── PEER ROW ─── */
+  .peer-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .peer-row:last-child { border-bottom: none; }
+
+  /* ─── MESSAGE BUBBLE ─── */
+  .msg-bubble { display: flex; gap: 10px; margin-bottom: 14px; }
+  .msg-bubble.me { flex-direction: row-reverse; }
+  .bubble {
+    max-width: 65%; padding: 10px 14px; border-radius: 16px;
+    font-size: 13px; line-height: 1.55;
+  }
+  .bubble-them { background: var(--surface-2); border: 1px solid var(--border); border-radius: 16px 16px 16px 4px; }
+  .bubble-me { background: var(--blue); border-radius: 16px 16px 4px 16px; }
+  .bubble-time { font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+
+  /* ─── AGENT CARD ─── */
+  .agent-card {
+    background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(168,85,247,0.06));
+    border: 1px solid rgba(59,130,246,0.2); border-radius: var(--radius); padding: 20px;
+    margin-bottom: 12px; cursor: pointer; transition: all 0.2s;
+  }
+  .agent-card:hover { border-color: rgba(59,130,246,0.4); box-shadow: 0 0 30px rgba(59,130,246,0.08); }
+  .agent-status { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+
+  /* ─── FILTER BAR ─── */
+  .filter-bar { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+  .filter-chip {
+    padding: 6px 14px; border-radius: 9px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-muted); font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer; transition: all 0.2s;
+  }
+  .filter-chip:hover { background: var(--surface); color: white; }
+  .filter-chip.active { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.35); color: var(--blue); }
+
+  /* ─── NODE INDICATOR ─── */
+  .node-bar {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    z-index: 300; display: flex; align-items: center; gap: 12px;
+    padding: 8px 20px; border-radius: 20px;
+    background: rgba(8,8,12,0.9); backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.06);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+    pointer-events: none;
+  }
+
+  /* ─── LOGIN PAGE ─── */
+  .login-shell {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .login-card {
+    width: min(480px, 100%); background: rgba(8,8,12,0.9);
+    border: 1px solid var(--border-2); border-radius: 28px; padding: 36px;
+  }
+  .login-logo {
+    width: 64px; height: 64px; border-radius: 20px;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; margin-bottom: 24px;
+    box-shadow: 0 0 40px rgba(59,130,246,0.3);
+  }
+
+  /* ─── STEP INDICATOR ─── */
+  .steps { display: flex; gap: 8px; margin-bottom: 24px; }
+  .step { height: 3px; flex: 1; border-radius: 2px; background: var(--border); transition: background 0.3s; }
+  .step.done { background: var(--blue); }
+  .step.active { background: var(--blue); opacity: 0.5; }
+
+  /* ─── WALLET PAGE ─── */
+  .balance-card {
+    background: linear-gradient(135deg, #1e40af, #4c1d95);
+    border-radius: var(--radius); padding: 28px;
+    box-shadow: 0 20px 60px rgba(30,64,175,0.3);
+    position: relative; overflow: hidden; margin-bottom: 16px;
+  }
+  .balance-card::before {
+    content: ''; position: absolute; top: -40%; right: -20%;
+    width: 300px; height: 300px; border-radius: 50%;
+    background: rgba(255,255,255,0.05); pointer-events: none;
+  }
+
+  /* ─── NOTIFICATION ITEM ─── */
+  .notif { display: flex; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--border); align-items: flex-start; cursor: pointer; transition: all 0.15s; }
+  .notif:hover { opacity: 0.85; }
+  .notif-icon { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+
+  /* ─── SETTINGS ─── */
+  .settings-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 0; border-bottom: 1px solid var(--border);
+  }
+  .settings-row:last-child { border-bottom: none; }
+  .toggle {
+    width: 44px; height: 24px; border-radius: 12px; background: var(--border);
+    position: relative; cursor: pointer; transition: background 0.2s; border: none;
+  }
+  .toggle.on { background: var(--blue); }
+  .toggle::after {
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 18px; height: 18px; border-radius: 50%; background: white;
+    transition: transform 0.2s;
+  }
+  .toggle.on::after { transform: translateX(20px); }
+
+  /* ─── SWARM PAGE ─── */
+  .swarm-node {
+    position: absolute; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 800; text-transform: uppercase;
+    cursor: pointer; transition: all 0.3s; border: 2px solid transparent;
+  }
+  .swarm-node:hover { border-color: var(--blue); box-shadow: 0 0 20px var(--blue-glow); transform: scale(1.1); }
+
+  /* ─── IPFS BADGE ─── */
+  .ipfs-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 6px; font-size: 10px; font-weight: 700;
+    background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.2); color: var(--green);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+
+  /* ─── MODAL ─── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 500;
+    background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    width: min(540px, 90vw); background: rgba(10,10,14,0.98);
+    border: 1px solid var(--border-2); border-radius: 28px; padding: 32px;
+    animation: fadeIn 0.25s ease;
+  }
+
+  /* ─── CREATE COMPOSER ─── */
+  .dropzone {
+    border: 2px dashed rgba(255,255,255,0.15); border-radius: var(--radius-sm);
+    padding: 40px 24px; text-align: center; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .dropzone:hover { border-color: rgba(59,130,246,0.4); background: rgba(59,130,246,0.04); }
+
+  /* ─── TAG PILL ─── */
+  .tag { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.25); color: var(--blue); margin: 2px; }
+
+  /* ─── RESPONSIVE ─── */
+  @media (max-width: 768px) {
+    .feed-grid { grid-template-columns: 1fr; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .grid-3 { grid-template-columns: 1fr; }
+    .nav-tabs { display: none; }
+  }
+
+  /* ─── CID display ─── */
+  .cid { font-family: monospace; font-size: 10px; color: var(--text-dim); word-break: break-all; }
+  .cid-badge { background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-family: monospace; font-size: 10px; color: var(--green); }
+
+  /* tooltip */
+  [data-tip] { position: relative; }
+  [data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.9); border: 1px solid var(--border);
+    color: white; font-size: 10px; padding: 4px 8px; border-radius: 6px;
+    white-space: nowrap; pointer-events: none; margin-bottom: 4px; z-index: 999;
+  }
+</style>
+</head>
+<body>
+
+<!-- ░░ SWARM BACKGROUND ░░ -->
+<div class="swarm-bg"></div>
+
+<!-- ░░░░░░░░░░░░░░░░ HEADER ░░░░░░░░░░░░░░░░ -->
+<header class="header" id="mainHeader" style="display:none;">
+  <div class="header-island">
+    <!-- Menu -->
+    <button class="header-btn" onclick="toggleMenu()" id="menuBtn" data-tip="Navigation">☰</button>
+
+    <!-- Nav back/forward -->
+    <div style="display:flex;gap:2px;background:rgba(255,255,255,0.04);border-radius:10px;padding:3px;">
+      <button class="header-btn" style="width:28px;height:28px;border-radius:8px;font-size:12px;">←</button>
+      <button class="header-btn" style="width:28px;height:28px;border-radius:8px;font-size:12px;">→</button>
+      <button class="header-btn" style="width:28px;height:28px;border-radius:8px;font-size:12px;">↺</button>
+    </div>
+
+    <!-- Omnibox -->
+    <div class="omnibox" onclick="showPage('search')">
+      <span style="font-size:13px;opacity:0.4;">🔍</span>
+      <span>Explore the swarm...</span>
+    </div>
+
+    <!-- Nav tabs -->
+    <nav class="nav-tabs">
+      <button class="nav-tab" id="tab-feed" onclick="showPage('feed')">Feed</button>
+      <button class="nav-tab" id="tab-create" onclick="showPage('create')">Create</button>
+      <button class="nav-tab" id="tab-messages" onclick="showPage('messages')">Messages</button>
+      <button class="nav-tab" id="tab-agents" onclick="showPage('agents')">Agent</button>
+      <button class="nav-tab" id="tab-notifications" onclick="showPage('notifications')">
+        Alerts <span style="background:var(--red);color:white;border-radius:8px;padding:1px 6px;font-size:9px;margin-left:4px;">3</span>
+      </button>
+    </nav>
+
+    <!-- Wallet -->
+    <div class="wallet-chip" onclick="showPage('wallet')">
+      <span class="wallet-dot"></span>
+      <span>42.5 BUCKS</span>
+    </div>
+
+    <!-- Profile -->
+    <div class="avatar avatar-sm" onclick="showPage('profile')" style="cursor:pointer;" data-tip="My Profile">SN</div>
+  </div>
+</header>
+
+<!-- ░░░░░░░░░░░░░░░░ NAV MENU OVERLAY ░░░░░░░░░░░░░░░░ -->
+<div class="modal-overlay" id="menuOverlay" onclick="closeMenu()">
+  <div class="modal" onclick="event.stopPropagation()" style="width:600px;">
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div onclick="showPage('feed');closeMenu()" style="display:flex;align-items:center;gap:20px;padding:18px;border-radius:20px;background:var(--surface);border:1px solid var(--border);cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='var(--surface)'">
+        <div style="width:52px;height:52px;border-radius:16px;background:rgba(59,130,246,0.1);display:flex;align-items:center;justify-content:center;font-size:22px;">🌐</div>
+        <div><div class="font-black uppercase text-sm" style="letter-spacing:0.2em;">Global Feed</div><div class="text-dim text-xs" style="margin-top:4px;letter-spacing:0.12em;">DECENTRALIZED CONTENT SWARM</div></div>
+      </div>
+      <div onclick="showPage('create');closeMenu()" style="display:flex;align-items:center;gap:20px;padding:18px;border-radius:20px;background:var(--surface);border:1px solid var(--border);cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='var(--surface)'">
+        <div style="width:52px;height:52px;border-radius:16px;background:rgba(168,85,247,0.1);display:flex;align-items:center;justify-content:center;font-size:22px;">✦</div>
+        <div><div class="font-black uppercase text-sm" style="letter-spacing:0.2em;">Create Post</div><div class="text-dim text-xs" style="margin-top:4px;letter-spacing:0.12em;">PUBLISH TO IPFS NETWORK</div></div>
+      </div>
+      <div onclick="showPage('messages');closeMenu()" style="display:flex;align-items:center;gap:20px;padding:18px;border-radius:20px;background:var(--surface);border:1px solid var(--border);cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='var(--surface)'">
+        <div style="width:52px;height:52px;border-radius:16px;background:rgba(34,197,94,0.1);display:flex;align-items:center;justify-content:center;font-size:22px;">💬</div>
+        <div><div class="font-black uppercase text-sm" style="letter-spacing:0.2em;">Messages</div><div class="text-dim text-xs" style="margin-top:4px;letter-spacing:0.12em;">P2P ORBITDB ENCRYPTED DMs</div></div>
+      </div>
+      <div onclick="showPage('agents');closeMenu()" style="display:flex;align-items:center;gap:20px;padding:18px;border-radius:20px;background:var(--surface);border:1px solid var(--border);cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='var(--surface)'">
+        <div style="width:52px;height:52px;border-radius:16px;background:rgba(245,158,11,0.1);display:flex;align-items:center;justify-content:center;font-size:22px;">🤖</div>
+        <div><div class="font-black uppercase text-sm" style="letter-spacing:0.2em;">My Agent</div><div class="text-dim text-xs" style="margin-top:4px;letter-spacing:0.12em;">AUTONOMOUS AI IDENTITY LAYER</div></div>
+      </div>
+      <div onclick="showPage('wallet');closeMenu()" style="display:flex;align-items:center;gap:20px;padding:18px;border-radius:20px;background:var(--surface);border:1px solid var(--border);cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='var(--surface)'">
+        <div style="width:52px;height:52px;border-radius:16px;background:rgba(59,130,246,0.1);display:flex;align-items:center;justify-content:center;font-size:22px;">💎</div>
+        <div><div class="font-black uppercase text-sm" style="letter-spacing:0.2em;">Wallet</div><div class="text-dim text-xs" style="margin-top:4px;letter-spacing:0.12em;">BUCKS CHAIN · LOCAL NODE</div></div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 8px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="avatar avatar-md">SN</div>
+        <div>
+          <div class="font-black uppercase text-xs" style="letter-spacing:0.15em;">Sandeep Nair</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">
+            <span class="dot dot-green animate-pulse"></span>
+            <span class="text-dim text-xs uppercase" style="letter-spacing:0.2em;">Synchronized</span>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="showPage('settings');closeMenu()">⚙ Settings</button>
+    </div>
+  </div>
+</div>
+
+<!-- ░░░░░░░░░░░░░░░░ PAGE: LOGIN ░░░░░░░░░░░░░░░░ -->
+<div class="page active fade-in" id="page-login">
+  <div class="login-shell">
+    <div class="login-card">
+      <div class="login-logo">⬡</div>
+      <div class="mb-8">
+        <div class="font-black text-xl mb-4">BUCKS GLOBAL</div>
+        <div class="text-muted text-sm">The decentralized network where you own your identity, content, and economy.</div>
+      </div>
+
+      <!-- Steps -->
+      <div class="steps">
+        <div class="step active" id="s1"></div>
+        <div class="step" id="s2"></div>
+        <div class="step" id="s3"></div>
+      </div>
+
+      <!-- Step 1: Mode -->
+      <div id="loginStep1">
+        <div style="display:grid;gap:10px;margin-bottom:20px;">
+          <button class="btn btn-primary" style="width:100%;justify-content:flex-start;gap:14px;padding:16px 20px;border-radius:16px;" onclick="setLoginMode('create')">
+            <span style="font-size:24px;">🔑</span>
+            <div style="text-align:left;">
+              <div style="font-size:14px;font-weight:800;">Create New Identity</div>
+              <div style="font-size:11px;opacity:0.7;margin-top:2px;">Generate Ed25519 keypair — you own it forever</div>
+            </div>
+          </button>
+          <button class="btn btn-ghost" style="width:100%;justify-content:flex-start;gap:14px;padding:16px 20px;border-radius:16px;" onclick="setLoginMode('restore')">
+            <span style="font-size:24px;">♻</span>
+            <div style="text-align:left;">
+              <div style="font-size:14px;font-weight:800;">Restore Identity</div>
+              <div style="font-size:11px;opacity:0.7;margin-top:2px;">Use guardian recovery or encrypted backup</div>
+            </div>
+          </button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:12px;border-radius:12px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.15);">
+          <span class="dot dot-green"></span>
+          <span class="text-xs text-green">Keys generated locally · Never leave your device · IPFS-anchored identity</span>
+        </div>
+      </div>
+
+      <!-- Step 2: Password -->
+      <div id="loginStep2" style="display:none;">
+        <div style="margin-bottom:16px;">
+          <label class="text-xs text-muted uppercase" style="letter-spacing:0.1em;display:block;margin-bottom:6px;">Set Password</label>
+          <input type="password" class="input" placeholder="Min. 8 characters" />
+        </div>
+        <div style="margin-bottom:20px;">
+          <label class="text-xs text-muted uppercase" style="letter-spacing:0.1em;display:block;margin-bottom:6px;">Confirm Password</label>
+          <input type="password" class="input" placeholder="Repeat password" />
+        </div>
+        <button class="btn btn-primary" style="width:100%;border-radius:14px;padding:14px;" onclick="loginStep3()">Generate My Identity →</button>
+      </div>
+
+      <!-- Step 3: Success -->
+      <div id="loginStep3" style="display:none;text-align:center;">
+        <div style="font-size:48px;margin-bottom:16px;">✅</div>
+        <div class="font-black text-lg mb-8">Identity Created</div>
+        <div class="cid-badge" style="margin-bottom:16px;display:block;text-align:left;">did:key:z6Mkh9vksnX3b2mZ9pRn4wVa8QFxYt6...</div>
+        <div class="text-muted text-sm mb-20">Your DID is anchored on IPFS. Your social graph follows you — not the platform.</div>
+        <button class="btn btn-primary" style="width:100%;border-radius:14px;padding:14px;" onclick="enterApp()">Enter the Swarm →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ░░░░░░░░░░░░░░░░ PAGE: FEED ░░░░░░░░░░░░░░░░ -->
+<div class="page fade-in" id="page-feed">
+  <div class="page-inner">
+    <div class="feed-grid">
+
+      <!-- LEFT: FEED -->
+      <div>
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+          <button class="filter-chip active" onclick="setFilter(this,'all')">All</button>
+          <button class="filter-chip" onclick="setFilter(this,'following')">Following</button>
+          <button class="filter-chip" onclick="setFilter(this,'popular')">🔥 Popular</button>
+          <button class="filter-chip" onclick="setFilter(this,'images')">Images</button>
+          <button class="filter-chip" onclick="setFilter(this,'video')">Video</button>
+          <button class="filter-chip" onclick="setFilter(this,'files')">Files</button>
+        </div>
+
+        <!-- Post 1 -->
+        <div class="post-card fade-in" onclick="openPostModal()">
+          <div class="flex items-center justify-between mb-12">
+            <div class="flex items-center gap-8">
+              <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">SM</div>
+              <div>
+                <div class="font-bold text-sm">Shafeeq Mac</div>
+                <div class="text-dim text-xs">did:key:z6Mk...1241 · 2h ago</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="ipfs-badge">⬡ IPFS</span>
+              <span class="badge badge-purple">Followed</span>
+            </div>
+          </div>
+          <div class="text-base" style="line-height:1.65;margin-bottom:4px;">Exploring the intersection of Jain philosophy and decentralized technology — true non-attachment means owning nothing, yet having access to everything. The blockchain is closer to dharmic principles than most realize. <span class="tag">#jain</span><span class="tag">#web3</span><span class="tag">#dharma</span></div>
+          <div class="post-media">
+            <div style="font-size:60px;">🎬</div>
+            <div class="post-media-label">Big_Bang_Jain_1.mp4 · 128MB · IPFS</div>
+          </div>
+          <div class="flex items-center justify-between">
+            <div class="post-actions">
+              <button class="action-btn vouched" onclick="event.stopPropagation();toggleVouch(this)">✦ Vouch <span>24</span></button>
+              <button class="action-btn" onclick="event.stopPropagation();">💬 12</button>
+              <button class="action-btn" onclick="event.stopPropagation();showPage('messages')">📨 Send</button>
+            </div>
+            <div class="cid-badge" onclick="event.stopPropagation()">Qmd5Cn9...oBx</div>
+          </div>
+        </div>
+
+        <!-- Post 2 -->
+        <div class="post-card fade-in">
+          <div class="flex items-center justify-between mb-12">
+            <div class="flex items-center gap-8">
+              <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#7c3aed,#db2777);">AK</div>
+              <div>
+                <div class="font-bold text-sm">Arjun K</div>
+                <div class="text-dim text-xs">did:key:z6Mk...8kzP · 5h ago</div>
+              </div>
+            </div>
+            <span class="ipfs-badge">⬡ IPFS</span>
+          </div>
+          <div class="text-base" style="line-height:1.65;margin-bottom:12px;">Just set up my Bucks node — content is pinned across the swarm. Nobody can take this down. This is what digital sovereignty feels like. <span class="tag">#ipfs</span><span class="tag">#decentralized</span></div>
+          <div class="post-media" style="height:160px;background:linear-gradient(135deg,rgba(59,130,246,0.1),rgba(168,85,247,0.08));">
+            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='150' viewBox='0 0 400 150'%3E%3Crect fill='%230a0a14' width='400' height='150'/%3E%3Ccircle cx='200' cy='75' r='40' fill='none' stroke='%233b82f6' stroke-width='2'/%3E%3Ccircle cx='200' cy='75' r='20' fill='%233b82f6' opacity='0.3'/%3E%3Cline x1='100' y1='75' x2='160' y2='75' stroke='%233b82f6' stroke-width='1'/%3E%3Cline x1='240' y1='75' x2='300' y2='75' stroke='%233b82f6' stroke-width='1'/%3E%3Ccircle cx='100' cy='75' r='8' fill='%237c3aed'/%3E%3Ccircle cx='300' cy='75' r='8' fill='%237c3aed'/%3E%3Ccircle cx='200' cy='30' r='8' fill='%2322c55e'/%3E%3Cline x1='200' y1='35' x2='200' y2='55' stroke='%2322c55e' stroke-width='1'/%3E%3C/svg%3E" style="width:100%;height:100%;object-fit:cover;" alt="node diagram" />
+            <div class="post-media-label">Network Diagram · PNG · IPFS</div>
+          </div>
+          <div class="post-actions">
+            <button class="action-btn" onclick="toggleVouch(this)">✦ Vouch <span>8</span></button>
+            <button class="action-btn">💬 3</button>
+            <button class="action-btn">📨 Send</button>
+          </div>
+        </div>
+
+        <!-- Post 3 — Text only -->
+        <div class="post-card fade-in">
+          <div class="flex items-center justify-between mb-12">
+            <div class="flex items-center gap-8">
+              <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#059669,#0891b2);">PV</div>
+              <div>
+                <div class="font-bold text-sm">Priya V</div>
+                <div class="text-dim text-xs">did:key:z6Mk...vZ8j · 1d ago</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <span class="ipfs-badge">⬡ IPFS</span>
+              <span class="badge badge-amber">🤖 Agent</span>
+            </div>
+          </div>
+          <div class="text-base" style="line-height:1.65;margin-bottom:4px;">My Bucks Agent auto-vouched 7 posts while I was offline and tipped 3 BUCKS to creators I follow. This is the future — your digital identity works for you even when you sleep. <span class="tag">#agent</span><span class="tag">#bucks</span></div>
+          <div style="margin:12px 0;padding:12px 14px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:12px;font-size:12px;color:var(--amber);">
+            🤖 Posted by Priya's Agent · Vouched by 14 peers in your network
+          </div>
+          <div class="post-actions">
+            <button class="action-btn" onclick="toggleVouch(this)">✦ Vouch <span>31</span></button>
+            <button class="action-btn">💬 19</button>
+            <button class="action-btn">📨 Send</button>
+            <button class="action-btn" onclick="showTipModal()">💎 Tip</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: SIDEBAR -->
+      <div>
+        <!-- Node Status -->
+        <div class="widget">
+          <div class="widget-title">⬡ Node Status</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <span class="dot dot-green animate-pulse"></span>
+            <span class="text-sm font-bold text-green">Connected to Swarm</span>
+          </div>
+          <div class="settings-row" style="padding:6px 0;">
+            <span class="text-sm text-muted">Peer ID</span>
+            <span class="cid" style="font-size:10px;max-width:100px;overflow:hidden;text-overflow:ellipsis;">12D3Koo...241PT</span>
+          </div>
+          <div class="settings-row" style="padding:6px 0;">
+            <span class="text-sm text-muted">Connected Peers</span>
+            <span class="text-sm font-bold text-green">7</span>
+          </div>
+          <div class="settings-row" style="padding:6px 0;">
+            <span class="text-sm text-muted">Pinned Content</span>
+            <span class="text-sm font-bold">14 CIDs</span>
+          </div>
+          <div class="settings-row" style="padding:6px 0;border:none;">
+            <span class="text-sm text-muted">OrbitDB Sync</span>
+            <span class="badge badge-green">Live</span>
+          </div>
+        </div>
+
+        <!-- Vouched by your network -->
+        <div class="widget">
+          <div class="widget-title">✦ Vouched by Network</div>
+          <div class="peer-row">
+            <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">SM</div>
+            <div style="flex:1;min-width:0;">
+              <div class="text-sm font-bold">Shafeeq Mac</div>
+              <div class="text-dim text-xs">Vouched 5 posts today</div>
+            </div>
+          </div>
+          <div class="peer-row">
+            <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#7c3aed,#db2777);">AK</div>
+            <div style="flex:1;min-width:0;">
+              <div class="text-sm font-bold">Arjun K</div>
+              <div class="text-dim text-xs">Vouched 3 posts today</div>
+            </div>
+          </div>
+          <div class="peer-row">
+            <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#059669,#0891b2);">PV</div>
+            <div style="flex:1;min-width:0;">
+              <div class="text-sm font-bold">Priya V</div>
+              <div class="text-dim text-xs">Agent active · 7 vouches</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Suggested Peers -->
+        <div class="widget">
+          <div class="widget-title">👁 Discovered Peers</div>
+          <div class="peer-row">
+            <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#dc2626,#ea580c);">RK</div>
+            <div style="flex:1;min-width:0;">
+              <div class="text-sm font-bold">Riya K</div>
+              <div class="text-dim text-xs">12D3Koo...9aXb</div>
+            </div>
+            <button class="btn btn-sm" style="padding:4px 10px;font-size:10px;">Follow</button>
+          </div>
+          <div class="peer-row">
+            <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#0891b2,#0d9488);">MS</div>
+            <div style="flex:1;min-width:0;">
+              <div class="text-sm font-bold">Mohammed S</div>
+              <div class="text-dim text-xs">12D3Koo...3kPq</div>
+            </div>
+            <button class="btn btn-sm" style="padding:4px 10px;font-size:10px;">Follow</button>
+          </div>
+        </div>
+
+        <!-- Trending Tags -->
+        <div class="widget">
+          <div class="widget-title">🔥 Trending in Swarm</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            <span class="tag" style="cursor:pointer;">#ipfs</span>
+            <span class="tag" style="cursor:pointer;">#jain</span>
+            <span class="tag" style="cursor:pointer;">#web3</span>
+            <span class="tag" style="cursor:pointer;">#bucks</span>
+            <span class="tag" style="cursor:pointer;">#agent</span>
+            <span class="tag" style="cursor:pointer;">#dharma</span>
+            <span class="tag" style="cursor:pointer;">#p2p</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ░░░░░░░░░░░░░░░░ PAGE: CREATE ░░░░░░░░░░░░░░░░ -->
+<div class="page fade-in" id="page-create">
+  <div class="page-inner" style="max-width:760px;">
+    <div class="mb-20">
+      <div class="font-black text-xl mb-4">Create Post</div>
+      <div class="text-muted text-sm">Publish to the IPFS swarm. Your content is content-addressed and permanent.</div>
+    </div>
+
+    <!-- Step indicator -->
+    <div class="steps" style="max-width:300px;margin-bottom:24px;">
+      <div class="step done" id="cs1"></div>
+      <div class="step" id="cs2"></div>
+    </div>
+
+    <div id="createStep1">
+      <!-- Drop Zone -->
+      <div class="dropzone mb-16" onclick="goCreateStep2()">
+        <div style="font-size:48px;margin-bottom:12px;">⬆</div>
+        <div class="font-bold text-base mb-4">Drop files here or browse</div>
+        <div class="text-muted text-sm mb-16">Images · Video · PDF · Audio · Documents</div>
+        <button class="btn btn-primary">Browse Files</button>
+      </div>
+
+      <div style="position:relative;margin:20px 0;">
+        <div class="divider"></div>
+        <span style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--bg);padding:0 12px;color:var(--text-dim);font-size:11px;text-transform:uppercase;letter-spacing:0.1em;">or write text</span>
+      </div>
+
+      <textarea class="input" rows="5" placeholder="What's on your mind? Share knowledge, media, or thoughts with the swarm..." style="margin-bottom:12px;"></textarea>
+      <button class="btn btn-primary" onclick="goCreateStep2()" style="width:100%;border-radius:14px;padding:14px;">Continue to Compose →</button>
+    </div>
+
+    <div id="createStep2" style="display:none;">
+      <div class="grid-2" style="margin-bottom:16px;align-items:start;">
+        <!-- Preview -->
+        <div style="background:rgba(0,0,0,0.4);border:1px solid var(--border);border-radius:16px;height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;">
+          <span style="font-size:48px;">🎬</span>
+          <span class="text-dim text-sm">selected_video.mp4</span>
+          <span class="badge badge-green">128 MB</span>
+        </div>
+        <!-- Form -->
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div>
+            <label class="text-xs text-muted uppercase" style="display:block;margin-bottom:6px;letter-spacing:0.1em;">Caption</label>
+            <textarea class="input" rows="5" placeholder="Describe your content...">Exploring Jain philosophy and decentralized networks — dharma in the digital age.</textarea>
+          </div>
+          <div>
+            <label class="text-xs text-muted uppercase" style="display:block;margin-bottom:6px;letter-spacing:0.1em;">Visibility</label>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary btn-sm" id="visPublic" onclick="setVis('public')">🌐 Public</button>
+              <button class="btn btn-ghost btn-sm" id="visFollowers" onclick="setVis('followers')">🔒 Followers</button>
+            </div>
+          </div>
+          <div>
+            <label class="text-xs text-muted uppercase" style="display:block;margin-bottom:6px;letter-spacing:0.1em;">Tags</label>
+            <input class="input" type="text" value="jain, dharma, web3, ipfs" />
+            <div style="margin-top:6px;">
+              <span class="tag">#jain</span><span class="tag">#dharma</span><span class="tag">#web3</span><span class="tag">#ipfs</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" onclick="backCreateStep1()">← Back</button>
+        <button class="btn btn-primary" style="flex:1;border-radius:14px;padding:14px;" onclick="publishPost()">⬡ Publish to IPFS</button>
+      </div>
+    </div>
+
+    <!-- Published state -->
+    <div id="createPublished" style="display:none;text-align:center;padding:40px 0;">
+      <div style="font-size:56px;margin-bottom:16px;">⬡</div>
+      <div class="font-black text-xl mb-8">Published to IPFS</div>
+      <div class="cid-badge" style="display:block;text-align:left;margin-bottom:12px;">QmXy9z7K3...n4wVa8QF</div>
+      <div class="text-muted text-sm mb-20">Your content is now content-addressed and pinned across the swarm. Peers who follow you will see it in their feed.</div>
+      <div style="display:flex;gap:8px;justify-content:center;">
+        <button class="btn btn-ghost" onclick="copyCID()">📋 Copy CID</button>
+        <button class="btn btn-primary" onclick="showPage('feed')">View in Feed →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ░░░░░░░░░░░░░░░░ PAGE: MESSAGES ░░░░░░░░░░░░░░░░ -->
+<div class="page fade-in" id="page-messages">
+  <div class="page-inner" style="max-width:900px;">
+    <div class="grid-2" style="height:calc(100vh - 140px);gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+
+      <!-- Conversations List -->
+      <div style="border-right:1px solid var(--border);overflow-y:auto;">
+        <div style="padding:16px;border-bottom:1px solid var(--border);">
+          <div class="font-black text-sm uppercase" style="letter-spacing:0.15em;margin-bottom:10px;">Messages</div>
+          <input class="input" type="text" placeholder="Search conversations..." style="font-size:12px;" />
+        </div>
+        <div id="convList">
+          <div class="conv-item" onclick="openConv('SM','Shafeeq Mac','blue')" style="display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;border-bottom:1px solid var(--border);background:rgba(59,130,246,0.06);border-left:3px solid var(--blue);">
+            <div style="position:relative;">
+              <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">SM</div>
+              <span class="dot dot-green animate-pulse" style="position:absolute;bottom:0;right:0;width:8px;height:8px;"></span>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div class="font-bold text-sm">Shafeeq Mac</div>
+                <div class="text-dim" style="font-size:10px;">2m</div>
+              </div>
+              <div class="text-muted text-xs" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Amazing session on Jain philosophy today...</div>
+            </div>
+          </div>
+          <div class="conv-item" onclick="openConv('AK','Arjun K','purple')" style="display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='transparent'">
+            <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#7c3aed,#db2777);">AK</div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div class="font-bold text-sm">Arjun K</div>
+                <div class="text-dim" style="font-size:10px;">1h</div>
+              </div>
+              <div class="text-muted text-xs" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Have you tried the relay node yet?</div>
+            </div>
+          </div>
+          <div class="conv-item" onclick="openConv('PV','Priya V','green')" style="display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='transparent'">
+            <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#059669,#0891b2);">PV</div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div class="font-bold text-sm">Priya V</div>
+                <div class="text-dim" style="font-size:10px;">3h</div>
+              </div>
+              <div class="text-muted text-xs" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">My agent tipped you 2 BUCKS 💎</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Thread -->
+      <div style="display:flex;flex-direction:column;height:100%;" id="chatPanel">
+        <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">SM</div>
+            <div>
+              <div class="font-bold text-sm">Shafeeq Mac</div>
+              <div style="display:flex;align-items:center;gap:5px;">
+                <span class="dot dot-green" style="width:6px;height:6px;"></span>
+                <span class="text-dim" style="font-size:10px;">Online · OrbitDB E2E</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-ghost btn-sm" onclick="showTipModal()">💎 Tip</button>
+            <button class="btn btn-ghost btn-sm">📁 Share CID</button>
+          </div>
+        </div>
+
+        <div style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:4px;">
+          <div style="text-align:center;margin-bottom:16px;">
+            <span style="font-size:10px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);padding:3px 10px;border-radius:10px;letter-spacing:0.1em;text-transform:uppercase;">OrbitDB · End-to-End · Signed</span>
+          </div>
+          <div class="msg-bubble">
+            <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">SM</div>
+            <div>
+              <div class="bubble bubble-them">Amazing session on Jain philosophy today. The way you connected non-attachment with content ownership was beautiful.</div>
+              <div class="bubble-time">10:24 AM · ✓✓ verified</div>
+            </div>
+          </div>
+          <div class="msg-bubble me">
+            <div class="avatar avatar-sm">SN</div>
+            <div>
+              <div class="bubble bubble-me">Thank you! I think Bucks Global embodies that — you own your digital identity but it lives in the commons.</div>
+              <div class="bubble-time" style="text-align:right;">10:26 AM · ✓✓</div>
+            </div>
+          </div>
+          <div class="msg-bubble">
+            <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">SM</div>
+            <div>
+              <div class="bubble bubble-them">Exactly. I shared the video on IPFS — here's the CID:</div>
+              <div class="cid-badge" style="margin-top:6px;">Qmd5Cn9Mu4WMeyaVHM...oBx</div>
+              <div class="bubble-time">10:27 AM · ✓✓ verified</div>
+            </div>
+          </div>
+          <div class="msg-bubble me">
+            <div class="avatar avatar-sm">SN</div>
+            <div>
+              <div class="bubble bubble-me">Pinned it! The swarm has it now. 🙏</div>
+              <div class="bubble-time" style="text-align:right;">10:28 AM · ✓✓</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Message Input -->
+        <div style="padding:16px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end;">
+          <textarea class="input" rows="2" placeholder="Send a signed message..." style="flex:1;resize:none;"></textarea>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <button class="btn btn-ghost btn-icon" title="Attach IPFS file">📎</button>
+            <button class="btn btn-primary btn-icon">→</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ░░░░░░░░░░░░░░░░ PAGE: AGENTS ░░░░░░░░░░░░░░░░ -->
+<div class="page fade-in" id="page-agents">
+  <div class="page-inner">
+    <div class="flex items-center justify-between mb-24">
+      <div>
+        <div class="font-black text-xl mb-4">My Bucks Agent</div>
+        <div class="text-muted text-sm">Your autonomous AI identity — acts on your behalf in the swarm</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span class="dot dot-green animate-pulse"></span>
+        <span class="badge badge-green">Active</span>
+      </div>
+    </div>
+
+    <div class="feed-grid">
+      <div>
+        <!-- Agent Identity Card -->
+        <div style="background:linear-gradient(135deg,rgba(59,130,246,0.1),rgba(168,85,247,0.08));border:1px solid rgba(59,130,246,0.2);border-radius:var(--radius);padding:24px;margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+            <div style="width:56px;height:56px;border-radius:18px;background:linear-gradient(135deg,var(--blue),var(--purple));display:flex;align-items:center;justify-content:center;font-size:28px;box-shadow:0 0 20px rgba(59,130,246,0.3);">🤖</div>
+            <div>
+              <div class="font-black text-base">Sandeep's Agent</div>
+              <div class="text-dim text-xs">did:key:agent:z6Mk...vZ3n</div>
+              <div style="display:flex;gap:6px;margin-top:4px;">
+                <span class="badge badge-green">Active</span>
+                <span class="badge badge-blue">v0.1</span>
+              </div>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="grid-3" style="gap:12px;">
+            <div style="text-align:center;padding:12px;background:rgba(0,0,0,0.3);border-radius:12px;">
+              <div class="font-black text-xl" style="color:var(--blue);">47</div>
+              <div class="text-dim text-xs uppercase" style="letter-spacing:0.1em;margin-top:2px;">Vouches</div>
+            </div>
+            <div style="text-align:center;padding:12px;background:rgba(0,0,0,0.3);border-radius:12px;">
+              <div class="font-black text-xl" style="color:var(--green);">8.5</div>
+              <div class="text-dim text-xs uppercase" style="letter-spacing:0.1em;margin-top:2px;">BUCKS Tipped</div>
+            </div>
+            <div style="text-align:center;padding:12px;background:rgba(0,0,0,0.3);border-radius:12px;">
+              <div class="font-black text-xl" style="color:var(--purple);">3</div>
+              <div class="text-dim text-xs uppercase" style="letter-spacing:0.1em;margin-top:2px;">Posts Scheduled</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Agent Behaviors -->
+        <div class="widget">
+          <div class="widget-title">⚡ Agent Behaviors</div>
+          <div class="settings-row">
+            <div>
+              <div class="text-sm font-bold">Auto-Vouch</div>
+              <div class="text-dim text-xs">Vouch posts from peers I follow that score ≥ 80%</div>
+            </div>
+            <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="text-sm font-bold">Auto-Tip Creators</div>
+              <div class="text-dim text-xs">Send 0.5 BUCKS to creators I vouch 3+ times/week</div>
+            </div>
+            <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="text-sm font-bold">Scheduled Posts</div>
+              <div class="text-dim text-xs">Publish pre-written posts when I'm offline</div>
+            </div>
+            <button class="toggle" onclick="this.classList.toggle('on')"></button>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="text-sm font-bold">Content Curation</div>
+              <div class="text-dim text-xs">Learn my preferences and surface matching content</div>
+            </div>
+            <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+          </div>
+          <div class="settings-row" style="border:none;">
+            <div>
+              <div class="text-sm font-bold">Auto-Pin Vouched Content</div>
+              <div class="text-dim text-xs">Keep vouched posts alive on IPFS via my node</div>
+            </div>
+            <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+          </div>
+        </div>
+
+        <!-- Scheduled Posts -->
+        <div class="widget">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <div class="widget-title" style="margin:0;">📅 Scheduled Posts</div>
+            <button class="btn btn-sm btn-primary">+ Add</button>
+          </div>
+          <div class="post-card" style="margin-bottom:8px;padding:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div style="flex:1;">
+                <div class="text-sm font-bold mb-4">Weekly Dharma Reflection</div>
+                <div class="text-muted text-xs">Connecting Jain principles with decentralized...</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+                <span class="badge badge-amber">Tomorrow 9AM</span>
+                <button class="btn btn-ghost btn-sm" style="font-size:10px;">Edit</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Sidebar -->
+      <div>
+        <div class="widget">
+          <div class="widget-title">📊 Agent Activity Log</div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="font-size:14px;">✦</span>
+              <div>
+                <div class="text-xs font-bold">Vouched Shafeeq's post</div>
+                <div class="text-dim" style="font-size:10px;">2 min ago · auto-behavior</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="font-size:14px;">💎</span>
+              <div>
+                <div class="text-xs font-bold">Tipped Priya V — 0.5 BUCKS</div>
+                <div class="text-dim" style="font-size:10px;">1 hour ago · auto-tip</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="font-size:14px;">⬡</span>
+              <div>
+                <div class="text-xs font-bold">Pinned 3 vouched CIDs</div>
+                <div class="text-dim" style="font-size:10px;">3 hours ago · auto-pin</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="font-size:14px;">✦</span>
+              <div>
+                <div class="text-xs font-bold">Vouched Arjun K's post</div>
+                <div class="text-dim" style="font-size:10px;">5 hours ago · auto-behavior</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="widget">
+          <div class="widget-title">⚙ Agent Budget</div>
+          <div class="settings-row" style="padding:8px 0;">
+            <span class="text-sm text-muted">Max tips / week</span>
+            <span class="text-sm font-bold">5 BUCKS</span>
+          </div>
+          <div class="settings-row" style="padding:8px 0;">
+            <span class="text-sm text-muted">Spent this week</span>
+            <span class="text-sm font-bold text-green">3.5 BUCKS</span>
+          </div>
+          <div style="height:6px;background:var(--border);border-radius:3px;margin:10px 0;">
+            <div style="height:100%;width:70%;background:var(--blue);border-radius:3px;"></div>
+          </div>
+          <button class="btn btn-ghost" style="width:100%;font-size:11px;margin-top:8px;">Adjust Budget</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ░░░░░░░░░░░░░░░░ PAGE: WALLET ░░░░░░░░░░░░░░░░ -->
+<div class="page fade-in" id="page-wallet">
+  <div class="page-inner" style="max-width:900px;">
+    <div class="balance-card">
+      <div style="position:relative;z-index:1;">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;opacity:0.7;margin-bottom:8px;">Total Balance</div>
+        <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:20px;">
+          <span style="font-size:52px;font-weight:900;letter-spacing:-2px;">42.5000</span>
+          <span style="font-size:20px;font-weight:700;opacity:0.8;">BUCKS</span>
+        </div>
+        <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(0,0,0,0.25);border-radius:12px;padding:6px 14px;font-family:monospace;font-size:12px;opacity:0.9;">
+          <span>1A2b3C4d...9Zk8</span>
+          <button style="background:none;border:none;color:white;cursor:pointer;opacity:0.6;" onclick="copyCID()">📋</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="grid-3" style="margin-bottom:20px;">
+      <button class="btn" style="flex-direction:column;gap:6px;padding:20px;border-radius:16px;" onclick="showSendModal()">
+        <span style="font-size:24px;">→</span>
+        <span>Send</span>
+      </button>
+      <button class="btn" style="flex-direction:column;gap:6px;padding:20px;border-radius:16px;">
+        <span style="font-size:24px;">←</span>
+        <span>Receive</span>
+      </button>
+      <button class="btn" style="flex-direction:column;gap:6px;padding:20px;border-radius:16px;" onclick="showTipModal()">
+        <span style="font-size:24px;">💎</span>
+        <span>Tip Creator</span>
+      </button>
+    </div>
+
+    <div class="grid-2">
+      <!-- Transactions -->
+      <div class="widget">
+        <div class="widget-title">Recent Transactions</div>
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:34px;height:34px;border-radius:10px;background:rgba(34,197,94,0.1);display:flex;align-items:center;justify-content:center;">←</div>
+              <div><div class="text-sm font-bold">From Priya V</div><div class="text-dim text-xs">Agent tip · 1h ago</div></div>
+            </div>
+            <span style="color:var(--green);font-weight:700;">+2.0 BUCKS</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:34px;height:34px;border-radius:10px;background:rgba(239,68,68,0.1);display:flex;align-items:center;justify-content:center;">→</div>
+              <div><div class="text-sm font-bold">To Shafeeq Mac</div><div class="text-dim text-xs">Creator tip · 3h ago</div></div>
+            </div>
+            <span style="color:var(--red);font-weight:700;">-1.5 BUCKS</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:34px;height:34px;border-radius:10px;background:rgba(34,197,94,0.1);display:flex;align-items:center;justify-content:center;">⬡</div>
+              <div><div class="text-sm font-bold">IPFS Pin Reward</div><div class="text-dim text-xs">Network · 1d ago</div></div>
+            </div>
+            <span style="color:var(--green);font-weight:700;">+0.25 BUCKS</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chain Info -->
+      <div class="widget">
+        <div class="widget-title">⛓ Chain Status</div>
+        <div class="settings-row" style="padding:8px 0;">
+          <span class="text-sm text-muted">Network</span>
+          <span class="badge badge-green">Bucks Mainnet</span>
+        </div>
+        <div class="settings-row" style="padding:8px 0;">
+          <span class="text-sm text-muted">Block Height</span>
+          <span class="text-sm font-bold">1,284,391</span>
+        </div>
+        <div class="settings-row" style="padding:8px 0;">
+          <span class="text-sm text-muted">Node URL</span>
+          <span class="text-dim text-xs">localhost:8080</span>
+        </div>
+        <div class="settings-row" style="padding:8px 0;border:none;">
+          <span class="text-sm text-muted">Sync Status</span>
+          <span class="badge badge-green">Synced</span>
+        </div>
+        <button class="btn btn-ghost" style="width:100%;font-size:11px;margin-top:8px;">Change Node URL</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ░░░░░░░░░░░░░░░░ PAGE: PROFILE ░░░░░░░░░░░░░░░░ -->
+<div class="page fade-in" id="page-profile">
+  <div class="page-inner">
+    <!-- Banner -->
+    <div style="height:160px;background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(168,85,247,0.12));border:1px solid var(--border);border-radius:var(--radius);margin-bottom:-48px;"></div>
+
+    <div style="padding:0 24px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px;">
+        <div class="avatar avatar-xl" style="border:4px solid var(--bg);">SN</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost" onclick="showPage('settings')">Edit Profile</button>
+          <button class="btn btn-primary btn-sm">+ Follow</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <div class="font-black text-xl mb-4">Sandeep Nair</div>
+        <div class="text-muted text-sm mb-8">@sandeep · Bucks Global founder · Building the decentralized identity layer for Web3</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <span class="ipfs-badge">⬡ DID Active</span>
+          <span class="badge badge-blue">🤖 Agent Running</span>
+          <span class="badge badge-green">⛓ Wallet Connected</span>
+        </div>
+        <div class="cid-badge">did:key:z6Mkh9vksnX3b2mZ9pRn4wVa8QFxYt6...</div>
+      </div>
+
+      <!-- Stats -->
+      <div style="display:flex;gap:24px;margin-bottom:24px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:14px;">
+        <div style="text-align:center;">
+          <div class="font-black text-xl">24</div>
+          <div class="text-dim text-xs uppercase" style="letter-spacing:0.1em;">Posts</div>
+        </div>
+        <div style="width:1px;background:var(--border);"></div>
+        <div style="text-align:center;">
+          <div class="font-black text-xl">312</div>
+          <div class="text-dim text-xs uppercase" style="letter-spacing:0.1em;">Followers</div>
+        </div>
+        <div style="width:1px;background:var(--border);"></div>
+        <div style="text-align:center;">
+          <div class="font-black text-xl">87</div>
+          <div class="text-dim text-xs uppercase" style="letter-spacing:0.1em;">Following</div>
+        </div>
+        <div style="width:1px;background:var(--border);"></div>
+        <div style="text-align:center;">
+          <div class="font-black text-xl" style="color:var(--green);">42.5</div>
+          <div class="text-dim text-xs uppercase" style="letter-spacing:0.1em;">BUCKS</div>
+        </div>
+      </div>
+
+      <!-- Posts Grid -->
+      <div class="filter-bar">
+        <button class="filter-chip active">Posts</button>
+        <button class="filter-chip">Vouched</button>
+        <button class="filter-chip">Media</button>
+      </div>
+
+      <div class="grid-3">
+        <div class="post-card" style="padding:14px;">
+          <div class="text-sm mb-8">Decentralization is not just tech — it's a philosophy of trust.</div>
+          <div style="display:flex;justify-content:space-between;"><span class="text-dim text-xs">2h ago</span><span class="badge badge-blue">✦ 24</span></div>
+        </div>
+        <div class="post-card" style="padding:14px;">
+          <div class="post-media" style="height:100px;margin:0 0 8px;"><span style="font-size:28px;">🎬</span></div>
+          <div class="text-dim text-xs">Big_Bang_Jain_1.mp4</div>
+        </div>
+        <div class="post-card" style="padding:14px;">
+          <div class="text-sm mb-8">The BUCKS agent just auto-tipped 3 creators. This is the future.</div>
+          <div style="display:flex;justify-content:space-between;"><span class="text-dim text-xs">1d ago</span><span class="badge badge-green">✦ 31</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ░░░░░░░░░░░░░░░░ PAGE: NOTIFICATIONS ░░░░░░░░░░░░░░░░ -->
+<div class="page fade-in" id="page-notifications">
+  <div class="page-inner" style="max-width:700px;">
+    <div class="flex items-center justify-between mb-24">
+      <div class="font-black text-xl">Notifications</div>
+      <button class="btn btn-ghost btn-sm">Mark all read</button>
+    </div>
+
+    <div class="widget">
+      <div class="notif" style="background:rgba(59,130,246,0.04);">
+        <div class="notif-icon" style="background:rgba(59,130,246,0.1);">✦</div>
+        <div style="flex:1;">
+          <div class="text-sm font-bold"><span style="color:var(--blue);">Shafeeq Mac</span> vouched your post</div>
+          <div class="text-muted text-xs" style="margin-top:3px;">"Decentralization is not just tech..." · 2 min ago</div>
+        </div>
+        <span class="dot dot-blue" style="flex-shrink:0;"></span>
+      </div>
+
+      <div class="notif" style="background:rgba(59,130,246,0.04);">
+        <div class="notif-icon" style="background:rgba(34,197,94,0.1);">💎</div>
+        <div style="flex:1;">
+          <div class="text-sm font-bold"><span style="color:var(--green);">Priya's Agent</span> tipped you 2 BUCKS</div>
+          <div class="text-muted text-xs" style="margin-top:3px;">Auto-tip · via OrbitDB · 1h ago</div>
+        </div>
+        <span class="dot dot-blue" style="flex-shrink:0;"></span>
+      </div>
+
+      <div class="notif" style="background:rgba(59,130,246,0.04);">
+        <div class="notif-icon" style="background:rgba(168,85,247,0.1);">👤</div>
+        <div style="flex:1;">
+          <div class="text-sm font-bold"><span style="color:var(--purple);">Mohammed S</span> followed you</div>
+          <div class="text-muted text-xs" style="margin-top:3px;">did:key:z6Mk...3kPq · 3h ago</div>
+        </div>
+        <span class="dot dot-blue" style="flex-shrink:0;"></span>
+      </div>
+
+      <div class="notif">
+        <div class="notif-icon" style="background:rgba(245,158,11,0.1);">🤖</div>
+        <div style="flex:1;">
+          <div class="text-sm font-bold">Your Agent vouched 7 posts while offline</div>
+          <div class="text-muted text-xs" style="margin-top:3px;">Auto-behavior · tipped 0.5 BUCKS to Shafeeq · Yesterday</div>
+        </div>
+      </div>
+
+      <div class="notif">
+        <div class="notif-icon" style="background:rgba(34,197,94,0.1);">⬡</div>
+        <div style="flex:1;">
+          <div class="text-sm font-bold">Content pinned by 3 peers</div>
+          <div class="text-muted text-xs" style="margin-top:3px;">QmXy9z7K3... · Social sharding active · Yesterday</div>
+        </div>
+      </div>
+
+      <div class="notif" style="border:none;">
+        <div class="notif-icon" style="background:rgba(59,130,246,0.1);">💬</div>
+        <div style="flex:1;">
+          <div class="text-sm font-bold"><span style="color:var(--blue);">Arjun K</span> replied to your comment</div>
+          <div class="text-muted text-xs" style="margin-top:3px;">"Have you tried the relay node..." · 2d ago</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ░░░░░░░░░░░░░░░░ PAGE: SEARCH ░░░░░░░░░░░░░░░░ -->
+<div class="page fade-in" id="page-search">
+  <div class="page-inner" style="max-width:800px;">
+    <div style="margin-bottom:20px;">
+      <input class="input" type="text" placeholder="Search posts, peers, CIDs, tags..." style="font-size:15px;padding:14px 18px;border-radius:18px;" autofocus />
+    </div>
+    <div class="filter-bar">
+      <button class="filter-chip active">All</button>
+      <button class="filter-chip">Peers</button>
+      <button class="filter-chip">Posts</button>
+      <button class="filter-chip">Tags</button>
+      <button class="filter-chip">CIDs</button>
+    </div>
+    <div class="text-muted text-sm" style="text-align:center;padding:40px;">Start typing to search the decentralized swarm...</div>
+  </div>
+</div>
+
+<!-- ░░░░░░░░░░░░░░░░ PAGE: SETTINGS ░░░░░░░░░░░░░░░░ -->
+<div class="page fade-in" id="page-settings">
+  <div class="page-inner" style="max-width:700px;">
+    <div class="font-black text-xl mb-24">Settings</div>
+
+    <div class="widget mb-16">
+      <div class="widget-title">🔑 Identity</div>
+      <div class="settings-row">
+        <div><div class="text-sm font-bold">My DID</div><div class="cid" style="margin-top:3px;">did:key:z6Mkh9vksnX3b2mZ9pRn4...</div></div>
+        <button class="btn btn-ghost btn-sm">Copy</button>
+      </div>
+      <div class="settings-row">
+        <div><div class="text-sm font-bold">Export Encrypted Backup</div><div class="text-dim text-xs">AES-GCM encrypted identity file</div></div>
+        <button class="btn btn-ghost btn-sm">Export</button>
+      </div>
+      <div class="settings-row" style="border:none;">
+        <div><div class="text-sm font-bold" style="color:var(--red);">Delete Identity</div><div class="text-dim text-xs">Permanently remove from this device</div></div>
+        <button class="btn btn-ghost btn-sm" style="border-color:rgba(239,68,68,0.3);color:var(--red);">Delete</button>
+      </div>
+    </div>
+
+    <div class="widget mb-16">
+      <div class="widget-title">⬡ Node & Network</div>
+      <div class="settings-row">
+        <div><div class="text-sm font-bold">Bootstrap Relay</div><div class="text-dim text-xs">relay.bucks.network:443/wss</div></div>
+        <button class="btn btn-ghost btn-sm">Edit</button>
+      </div>
+      <div class="settings-row">
+        <div><div class="text-sm font-bold">IPFS Storage Used</div><div class="text-dim text-xs">IndexedDB local blocks</div></div>
+        <span class="badge badge-blue">2.3 GB</span>
+      </div>
+      <div class="settings-row" style="border:none;">
+        <div><div class="text-sm font-bold">Social Sharding</div><div class="text-dim text-xs">Pin 10% of discovered peers' content</div></div>
+        <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+      </div>
+    </div>
+
+    <div class="widget mb-16">
+      <div class="widget-title">🛡 Guardians (Recovery)</div>
+      <div class="peer-row">
+        <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">SM</div>
+        <div style="flex:1;"><div class="text-sm font-bold">Shafeeq Mac</div><div class="text-dim text-xs">Guardian · Shard 1/3</div></div>
+        <span class="badge badge-green">Active</span>
+      </div>
+      <div class="peer-row">
+        <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#7c3aed,#db2777);">AK</div>
+        <div style="flex:1;"><div class="text-sm font-bold">Arjun K</div><div class="text-dim text-xs">Guardian · Shard 2/3</div></div>
+        <span class="badge badge-green">Active</span>
+      </div>
+      <div class="peer-row" style="border:none;">
+        <div style="width:32px;height:32px;border-radius:50%;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-dim);">+</div>
+        <div style="flex:1;"><div class="text-dim text-sm">Add Guardian (3 required)</div></div>
+        <button class="btn btn-ghost btn-sm">Add</button>
+      </div>
+    </div>
+
+    <div class="widget">
+      <div class="widget-title">⚙ Preferences</div>
+      <div class="settings-row">
+        <div class="text-sm font-bold">Dark Mode</div>
+        <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+      </div>
+      <div class="settings-row" style="border:none;">
+        <div class="text-sm font-bold">Compact Feed</div>
+        <button class="toggle" onclick="this.classList.toggle('on')"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ░░░░░░░░░░░░░░░░ NODE STATUS BAR ░░░░░░░░░░░░░░░░ -->
+<div class="node-bar" id="nodeBar" style="display:none;">
+  <span class="dot dot-green animate-pulse"></span>
+  <span style="color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;">Swarm Connected</span>
+  <span style="width:1px;height:12px;background:var(--border);"></span>
+  <span style="color:var(--text-dim);letter-spacing:0.05em;">7 Peers</span>
+  <span style="width:1px;height:12px;background:var(--border);"></span>
+  <span class="ipfs-badge" style="font-size:9px;padding:2px 6px;">⬡ IPFS</span>
+  <span style="width:1px;height:12px;background:var(--border);"></span>
+  <span style="color:var(--blue);font-size:10px;">OrbitDB ↺ Live</span>
+</div>
+
+<!-- ░░░░░░░░░░░░░░░░ MODALS ░░░░░░░░░░░░░░░░ -->
+
+<!-- Post Detail Modal -->
+<div class="modal-overlay" id="postModal" onclick="this.classList.remove('open')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+      <div class="avatar avatar-md" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">SM</div>
+      <div>
+        <div class="font-bold">Shafeeq Mac</div>
+        <div class="text-dim text-xs">2h ago · Public · <span class="ipfs-badge" style="font-size:9px;">⬡ IPFS</span></div>
+      </div>
+    </div>
+    <div class="text-base" style="line-height:1.7;margin-bottom:16px;">Exploring the intersection of Jain philosophy and decentralized technology — true non-attachment means owning nothing, yet having access to everything.</div>
+    <div class="post-media" style="height:180px;"><span style="font-size:40px;">🎬</span><div class="post-media-label">Big_Bang_Jain_1.mp4 · 128MB</div></div>
+    <div class="cid-badge" style="display:block;margin-bottom:16px;">QmXd5Cn9Mu4WMeyaVHMQuYN2BDS...oBx</div>
+    <div class="divider"></div>
+    <div style="margin-bottom:16px;">
+      <div class="text-xs text-muted uppercase" style="letter-spacing:0.1em;margin-bottom:10px;">Comments (3)</div>
+      <div class="msg-bubble" style="margin-bottom:8px;">
+        <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#059669,#0891b2);">PV</div>
+        <div class="bubble bubble-them" style="font-size:12px;">This is exactly the kind of content that needed a decentralized home. 🙏</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <input class="input" type="text" placeholder="Add a comment..." style="flex:1;" />
+      <button class="btn btn-primary" style="padding:10px 16px;">Post</button>
+    </div>
+    <div class="post-actions" style="margin-top:12px;">
+      <button class="action-btn vouched">✦ Vouch 24</button>
+      <button class="action-btn" onclick="showTipModal();document.getElementById('postModal').classList.remove('open')">💎 Tip</button>
+    </div>
+    <button class="btn btn-ghost" style="width:100%;margin-top:12px;font-size:11px;" onclick="document.getElementById('postModal').classList.remove('open')">Close</button>
+  </div>
+</div>
+
+<!-- Tip Modal -->
+<div class="modal-overlay" id="tipModal" onclick="this.classList.remove('open')">
+  <div class="modal" onclick="event.stopPropagation()" style="width:440px;">
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:40px;margin-bottom:8px;">💎</div>
+      <div class="font-black text-lg">Tip Creator</div>
+      <div class="text-muted text-sm">Send BUCKS directly via the blockchain</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:14px;margin-bottom:16px;">
+      <div class="avatar avatar-sm" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">SM</div>
+      <div><div class="font-bold text-sm">Shafeeq Mac</div><div class="text-dim text-xs">1A2b3C...9Zk8</div></div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <label class="text-xs text-muted uppercase" style="display:block;margin-bottom:6px;letter-spacing:0.1em;">Amount (BUCKS)</label>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="setTipAmt(0.5)">0.5</button>
+        <button class="btn btn-ghost btn-sm" onclick="setTipAmt(1)">1.0</button>
+        <button class="btn btn-ghost btn-sm" onclick="setTipAmt(2)">2.0</button>
+        <button class="btn btn-ghost btn-sm" onclick="setTipAmt(5)">5.0</button>
+      </div>
+      <input class="input" type="number" id="tipAmt" value="1.0" step="0.5" min="0.1" />
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost" style="flex:1;" onclick="document.getElementById('tipModal').classList.remove('open')">Cancel</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="sendTip()">Send 💎 Tip</button>
+    </div>
+  </div>
+</div>
+
+<!-- Send BUCKS Modal -->
+<div class="modal-overlay" id="sendModal" onclick="this.classList.remove('open')">
+  <div class="modal" onclick="event.stopPropagation()" style="width:440px;">
+    <div class="font-black text-lg mb-20">Send BUCKS</div>
+    <div style="margin-bottom:12px;">
+      <label class="text-xs text-muted uppercase" style="display:block;margin-bottom:6px;letter-spacing:0.1em;">Recipient Address</label>
+      <input class="input" type="text" placeholder="1A2b3C... or did:key:z6Mk..." />
+    </div>
+    <div style="margin-bottom:20px;">
+      <label class="text-xs text-muted uppercase" style="display:block;margin-bottom:6px;letter-spacing:0.1em;">Amount</label>
+      <input class="input" type="number" placeholder="0.00" step="0.1" />
+      <div class="text-dim text-xs" style="margin-top:4px;">Balance: 42.5 BUCKS</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost" style="flex:1;" onclick="document.getElementById('sendModal').classList.remove('open')">Cancel</button>
+      <button class="btn btn-primary" style="flex:1;">Send →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ░░░░░░░░░░░░░░░░ JAVASCRIPT ░░░░░░░░░░░░░░░░ -->
+<script>
+  let currentPage = 'login';
+
+  function showPage(name) {
+    // hide all pages
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    // show target
+    const target = document.getElementById('page-' + name);
+    if (target) { target.classList.add('active'); target.classList.add('fade-in'); }
+    currentPage = name;
+
+    // update nav tabs
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    const tab = document.getElementById('tab-' + name);
+    if (tab) tab.classList.add('active');
+
+    // hide menu
+    closeMenu();
+  }
+
+  function enterApp() {
+    document.getElementById('mainHeader').style.display = 'flex';
+    document.getElementById('nodeBar').style.display = 'flex';
+    showPage('feed');
+  }
+
+  // ── LOGIN FLOW ──
+  function setLoginMode(mode) {
+    document.getElementById('loginStep1').style.display = 'none';
+    document.getElementById('loginStep2').style.display = 'block';
+    document.getElementById('s1').className = 'step done';
+    document.getElementById('s2').className = 'step active';
+  }
+
+  function loginStep3() {
+    document.getElementById('loginStep2').style.display = 'none';
+    document.getElementById('loginStep3').style.display = 'block';
+    document.getElementById('s2').className = 'step done';
+    document.getElementById('s3').className = 'step done';
+  }
+
+  // ── MENU ──
+  function toggleMenu() { document.getElementById('menuOverlay').classList.toggle('open'); }
+  function closeMenu() { document.getElementById('menuOverlay').classList.remove('open'); }
+
+  // ── FILTERS ──
+  function setFilter(btn, val) {
+    document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  // ── VOUCH ──
+  function toggleVouch(btn) {
+    const isVouched = btn.classList.contains('vouched');
+    btn.classList.toggle('vouched');
+    const span = btn.querySelector('span');
+    if (span) span.textContent = isVouched ? parseInt(span.textContent)-1 : parseInt(span.textContent)+1;
+  }
+
+  // ── CREATE FLOW ──
+  function goCreateStep2() {
+    document.getElementById('createStep1').style.display = 'none';
+    document.getElementById('createStep2').style.display = 'block';
+    document.getElementById('cs1').className = 'step done';
+    document.getElementById('cs2').className = 'step done';
+  }
+  function backCreateStep1() {
+    document.getElementById('createStep2').style.display = 'none';
+    document.getElementById('createStep1').style.display = 'block';
+    document.getElementById('cs2').className = 'step';
+  }
+  function publishPost() {
+    document.getElementById('createStep2').style.display = 'none';
+    document.getElementById('createPublished').style.display = 'block';
+  }
+  function setVis(v) {
+    document.getElementById('visPublic').className = v==='public' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+    document.getElementById('visFollowers').className = v==='followers' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+  }
+
+  // ── MODALS ──
+  function openPostModal() { document.getElementById('postModal').classList.add('open'); }
+  function showTipModal() { document.getElementById('tipModal').classList.add('open'); }
+  function showSendModal() { document.getElementById('sendModal').classList.add('open'); }
+
+  function setTipAmt(v) { document.getElementById('tipAmt').value = v; }
+  function sendTip() {
+    document.getElementById('tipModal').classList.remove('open');
+    // toast feedback
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);color:#22c55e;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:700;';
+    toast.textContent = '💎 Tip sent successfully!';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2500);
+  }
+
+  function copyCID() {
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);color:#3b82f6;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:700;';
+    toast.textContent = '📋 CID copied to clipboard';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2000);
+  }
+
+  // ── SWARM CANVAS ──
+  (function() {
+    const canvas = document.createElement('canvas');
+    canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;';
+    document.querySelector('.swarm-bg').appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    let W, H, nodes = [];
+    function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+    resize(); window.addEventListener('resize', resize);
+    for (let i=0; i<28; i++) nodes.push({
+      x: Math.random()*W, y: Math.random()*H,
+      vx: (Math.random()-.5)*0.3, vy: (Math.random()-.5)*0.3,
+      r: 2+Math.random()*3,
+      hue: Math.random() > 0.6 ? 220 : Math.random() > 0.5 ? 270 : 160
+    });
+    function draw() {
+      ctx.clearRect(0,0,W,H);
+      nodes.forEach(n => {
+        n.x += n.vx; n.y += n.vy;
+        if (n.x<0||n.x>W) n.vx*=-1;
+        if (n.y<0||n.y>H) n.vy*=-1;
+      });
+      nodes.forEach((a,i) => nodes.slice(i+1).forEach(b => {
+        const d = Math.hypot(a.x-b.x, a.y-b.y);
+        if (d < 160) {
+          ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+          ctx.strokeStyle = `hsla(${a.hue},80%,70%,${0.12*(1-d/160)})`; ctx.lineWidth=0.8; ctx.stroke();
+        }
+      }));
+      nodes.forEach(n => {
+        ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
+        ctx.fillStyle = `hsla(${n.hue},80%,70%,0.5)`; ctx.fill();
+      });
+      requestAnimationFrame(draw);
+    }
+    draw();
+  })();
+
+  // keyboard shortcuts
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
+    }
+  });
+</script>
+
+</body>
+</html>

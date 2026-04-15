@@ -1,11 +1,18 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
   reactCompiler: true,
-  output: 'export',
   images: {
-    unoptimized: true, // Required for static export
+    // Allow IPFS gateway images (both public and custom)
+    remotePatterns: [
+      { protocol: "https", hostname: "**.ipfs.io" },
+      { protocol: "https", hostname: "ipfs.io" },
+      { protocol: "https", hostname: "cloudflare-ipfs.com" },
+      { protocol: "https", hostname: "**.supabase.co" },
+      { protocol: "https", hostname: "ipfs.bucks.global" },
+      { protocol: "http", hostname: "localhost" },
+      { protocol: "http", hostname: "127.0.0.1" },
+    ],
   },
 };
 

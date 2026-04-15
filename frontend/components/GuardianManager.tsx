@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { FaShieldHalved, FaUserPlus, FaTrash, FaCircleCheck, FaSpinner, FaCircleInfo } from 'react-icons/fa6';
+import { FaShieldHalved, FaUserPlus, FaCircleCheck, FaSpinner, FaCircleInfo } from 'react-icons/fa6';
+import api from '@/lib/api';
 
 interface GuardianManagerProps {
     onClose?: () => void;
@@ -15,18 +16,14 @@ export default function GuardianManager({ onClose }: GuardianManagerProps) {
 
     const fetchData = async () => {
         try {
-            const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
             const [gRes, cRes] = await Promise.all([
-                fetch(`http://${host}:8000/api/guardians`),
-                fetch(`http://${host}:8000/api/following`)
+                api.get<{ guardians: string[] }>('/guardians'),
+                api.get<{ following: any[] }>('/following'),
             ]);
 
-            const gData = await gRes.json();
-            const cData = await cRes.json();
-
-            setGuardians(gData.guardians || []);
-            // Only show 'contact' tier as potential guardians
-            setContacts(cData.following.filter((f: any) => f.relationship_type === 'contact'));
+            setGuardians(gRes.data.guardians || []);
+            // Only contacts can become guardians
+            setContacts((cRes.data.following || []).filter((f: any) => f.relationship_type === 'contact'));
         } catch (error) {
             console.error('Failed to fetch guardian data', error);
         } finally {
@@ -40,7 +37,7 @@ export default function GuardianManager({ onClose }: GuardianManagerProps) {
 
     const addGuardian = async (peerId: string) => {
         if (guardians.length >= 7) {
-            alert("Maximum 7 guardians allowed.");
+            alert('Maximum 7 guardians allowed.');
             return;
         }
 
@@ -48,21 +45,13 @@ export default function GuardianManager({ onClose }: GuardianManagerProps) {
         try {
             const formData = new FormData();
             formData.append('peer_id', peerId);
-
-            const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-            const res = await fetch(`http://${host}:8000/api/guardians/add`, {
-                method: 'POST',
-                body: formData
+            await api.post('/guardians/add', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
             });
-
-            if (res.ok) {
-                fetchData();
-            } else {
-                const err = await res.json();
-                alert(err.detail);
-            }
-        } catch (error) {
-            console.error('Add guardian error', error);
+            await fetchData();
+        } catch (error: any) {
+            const msg = error?.response?.data?.detail || 'Failed to add guardian';
+            alert(msg);
         } finally {
             setActionLoading(null);
         }
@@ -89,7 +78,7 @@ export default function GuardianManager({ onClose }: GuardianManagerProps) {
                     </div>
                 </div>
                 {onClose && (
-                    <button onClick={onClose} className="text-secondary hover:text-foreground p-2">
+                    <button onClick={onClose} className="text-secondary hover:text-foreground p-2 text-sm">
                         Close
                     </button>
                 )}
@@ -97,15 +86,18 @@ export default function GuardianManager({ onClose }: GuardianManagerProps) {
 
             <div className="p-6 space-y-6">
                 <div className="bg-blue-50/50 p-4 rounded-2xl flex items-start space-x-3">
-                    <FaCircleInfo className="text-primary mt-1" />
+                    <FaCircleInfo className="text-primary mt-1 shrink-0" />
                     <p className="text-xs text-secondary leading-relaxed">
-                        Select up to 7 trusted contacts as guardians. If you lose access to your device, a majority (4/7) can help you recover your account identity.
+                        Select up to 7 trusted contacts as guardians. If you lose access to your device,
+                        a majority (4/7) can help you recover your account identity.
                     </p>
                 </div>
 
                 {/* Current Guardians */}
                 <div className="space-y-3">
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Active Guardians ({guardians.length})</h3>
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                        Active Guardians ({guardians.length})
+                    </h3>
                     {guardians.length === 0 ? (
                         <div className="py-8 text-center border-2 border-dashed border-gray-100 rounded-3xl">
                             <p className="text-sm text-secondary">No guardians added yet.</p>
@@ -118,16 +110,16 @@ export default function GuardianManager({ onClose }: GuardianManagerProps) {
                                     <div key={gid} className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
                                         <div className="flex items-center space-x-3">
                                             <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-xs font-bold shadow-sm">
-                                                {peer?.username?.[0] || 'U'}
+                                                {peer?.username?.[0]?.toUpperCase() || 'U'}
                                             </div>
                                             <div>
-                                                <p className="text-sm font-bold">{peer?.username || `Peer ${gid.substring(0, 8)}...`}</p>
+                                                <p className="text-sm font-bold">
+                                                    {peer?.username || `Peer ${gid.substring(0, 8)}…`}
+                                                </p>
                                                 <p className="text-[10px] text-secondary font-mono truncate max-w-[150px]">{gid}</p>
                                             </div>
                                         </div>
-                                        <div className="flex items-center text-green-500">
-                                            <FaCircleCheck className="text-sm" />
-                                        </div>
+                                        <FaCircleCheck className="text-green-500 text-sm" />
                                     </div>
                                 );
                             })}
@@ -140,35 +132,44 @@ export default function GuardianManager({ onClose }: GuardianManagerProps) {
                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Available Contacts</h3>
                     <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
                         {contacts.filter(c => !guardians.includes(c.peer_id)).length === 0 ? (
-                            <p className="text-xs text-secondary text-center py-4">Add more trusted contacts to select guardians.</p>
+                            <p className="text-xs text-secondary text-center py-4">
+                                Add more trusted contacts to select guardians.
+                            </p>
                         ) : (
-                            contacts.filter(c => !guardians.includes(c.peer_id)).map((peer) => (
-                                <div key={peer.peer_id} className="flex items-center justify-between p-3 border border-gray-100 rounded-2xl hover:border-primary/30 transition-all">
-                                    <div className="flex items-center space-x-3">
-                                        <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold">
-                                            {peer.username[0]}
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-bold">{peer.username}</p>
-                                            <p className="text-[10px] text-secondary">Trusted Contact</p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => addGuardian(peer.peer_id)}
-                                        disabled={actionLoading === peer.peer_id || guardians.length >= 7}
-                                        className="p-2 bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-50"
+                            contacts
+                                .filter(c => !guardians.includes(c.peer_id))
+                                .map((peer) => (
+                                    <div
+                                        key={peer.peer_id}
+                                        className="flex items-center justify-between p-3 border border-gray-100 rounded-2xl hover:border-primary/30 transition-all"
                                     >
-                                        {actionLoading === peer.peer_id ? <FaSpinner className="animate-spin" /> : <FaUserPlus />}
-                                    </button>
-                                </div>
-                            ))
+                                        <div className="flex items-center space-x-3">
+                                            <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold">
+                                                {peer.username?.[0]?.toUpperCase() || 'U'}
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-bold">{peer.username}</p>
+                                                <p className="text-[10px] text-secondary">Trusted Contact</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => addGuardian(peer.peer_id)}
+                                            disabled={actionLoading === peer.peer_id || guardians.length >= 7}
+                                            className="p-2 bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                                        >
+                                            {actionLoading === peer.peer_id
+                                                ? <FaSpinner className="animate-spin" />
+                                                : <FaUserPlus />}
+                                        </button>
+                                    </div>
+                                ))
                         )}
                     </div>
                 </div>
             </div>
 
             {guardians.length >= 4 && (
-                <div className="p-6 bg-green-50 mt-4 text-center">
+                <div className="p-6 bg-green-50 text-center">
                     <p className="text-xs font-bold text-green-700">✓ Recovery Threshold Met</p>
                     <p className="text-[10px] text-green-600">You have enough guardians to secure your account.</p>
                 </div>

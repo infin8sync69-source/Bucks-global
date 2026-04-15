@@ -8,45 +8,49 @@ const getHost = () => {
     return 'localhost';
 };
 
-// API Client configuration
-// Use the current host to ensure it works on the local network (WiFi)
-const getBaseURL = () => `http://${getHost()}:8000/api`;
+const normalizeBaseUrl = (url: string) => url.replace(/\/+$/, '');
 
+export const getApiBaseUrl = () => {
+    const configured = process.env.NEXT_PUBLIC_API_URL;
+    if (configured) {
+        const base = normalizeBaseUrl(configured);
+        return base.endsWith('/api') ? base : `${base}/api`;
+    }
+    return `http://${getHost()}:8000/api`;
+};
+
+// API Client configuration
 export const api = axios.create({
-    baseURL: getBaseURL(),
+    baseURL: getApiBaseUrl(),
     headers: {
         'Content-Type': 'application/json',
     },
 });
 
 // Helper to compute HMAC-SHA256 signature
-const signRequest = async (secret: string, method: string, path: string, timestamp: string): Promise<string> => {
-    const encoder = new TextEncoder();
-    const keyData = encoder.encode(secret);
-    const payload = `${method.toUpperCase()}${path}${timestamp}`;
-
+const signRequest = async (
+    secret: string,
+    method: string,
+    path: string,
+    timestamp: string,
+): Promise<string> => {
     try {
+        const encoder = new TextEncoder();
         const key = await window.crypto.subtle.importKey(
-            "raw",
-            keyData,
-            { name: "HMAC", hash: "SHA-256" },
+            'raw',
+            encoder.encode(secret),
+            { name: 'HMAC', hash: 'SHA-256' },
             false,
-            ["sign"]
+            ['sign'],
         );
-
-        const signature = await window.crypto.subtle.sign(
-            "HMAC",
-            key,
-            encoder.encode(payload)
-        );
-
-        // Convert array buffer to hex string
+        const payload = `${method.toUpperCase()}${path}${timestamp}`;
+        const signature = await window.crypto.subtle.sign('HMAC', key, encoder.encode(payload));
         return Array.from(new Uint8Array(signature))
             .map(b => b.toString(16).padStart(2, '0'))
             .join('');
     } catch (e) {
-        console.error("Signing failed", e);
-        return "";
+        console.error('Signing failed', e);
+        return '';
     }
 };
 
@@ -59,14 +63,14 @@ api.interceptors.request.use(async (config) => {
         if (did) {
             config.headers['X-DID'] = did;
 
-            // If we have a secret, sign the request
             if (secret && config.url) {
                 const timestamp = Date.now().toString();
-                // Extract path from URL (remove base URL if present, though axios config.url is usually relative)
-                const path = config.url.replace(config.baseURL || '', '');
+                // config.url is relative when using axios baseURL
+                const path = config.url.startsWith('http')
+                    ? new URL(config.url).pathname
+                    : config.url;
 
                 const signature = await signRequest(secret, config.method || 'GET', path, timestamp);
-
                 if (signature) {
                     config.headers['X-Signature'] = signature;
                     config.headers['X-Timestamp'] = timestamp;
@@ -76,6 +80,8 @@ api.interceptors.request.use(async (config) => {
     }
     return config;
 });
+
+// ─── Type Definitions ────────────────────────────────────────────────────────
 
 export interface LibraryItem {
     cid: string;
@@ -95,10 +101,18 @@ export interface LibraryItem {
 export interface Interaction {
     recommended: boolean;
     not_recommended: boolean;
-    comments: string[];
+    comments: CommentItem[];
     views: number;
     likes_count: number;
     dislikes_count: number;
+}
+
+export interface CommentItem {
+    id?: number;
+    text: string;
+    user_peer_id: string;
+    username?: string;
+    timestamp: string;
 }
 
 export interface UserProfile {
@@ -120,6 +134,19 @@ export interface UserProfile {
     onboarding?: boolean;
 }
 
+export interface Notification {
+    id: number;
+    user_peer_id: string;
+    type: 'message' | 'connection' | 'mention' | 'follow';
+    title: string;
+    message: string;
+    link: string;
+    timestamp: string;
+    is_read: boolean;
+}
+
+// ─── Library / Posts ─────────────────────────────────────────────────────────
+
 export const fetchLibrary = async () => {
     const response = await api.get<{ library: LibraryItem[] }>('/library');
     return response.data.library;
@@ -129,6 +156,23 @@ export const fetchPost = async (cid: string) => {
     const response = await api.get<LibraryItem>(`/library/${cid}`);
     return response.data;
 };
+
+export const deletePost = async (cid: string) => {
+    const response = await api.delete<{ success: boolean; message: string }>(`/library/${cid}`);
+    return response.data;
+};
+
+export const updatePost = async (cid: string, title: string, description: string) => {
+    const formData = new FormData();
+    formData.append('title', title);
+    formData.append('description', description);
+    const response = await api.put<{ success: boolean; post: LibraryItem }>(`/library/${cid}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+};
+
+// ─── Interactions ─────────────────────────────────────────────────────────────
 
 export const fetchInteractions = async (cid: string) => {
     const response = await api.get<Interaction>(`/interactions/${cid}`);
@@ -156,7 +200,7 @@ export const toggleDislike = async (cid: string) => {
 };
 
 export const addComment = async (cid: string, text: string) => {
-    const response = await api.post<{ success: boolean; comment: string }>(`/interactions/${cid}/comment`, { text });
+    const response = await api.post<{ success: boolean; comment: CommentItem }>(`/interactions/${cid}/comment`, { text });
     return response.data;
 };
 
@@ -164,6 +208,8 @@ export const deleteComment = async (cid: string, index: number) => {
     const response = await api.delete<{ success: boolean }>(`/interactions/${cid}/comment/${index}`);
     return response.data;
 };
+
+// ─── Upload ───────────────────────────────────────────────────────────────────
 
 export const uploadFile = async (formData: FormData) => {
     // If running inside the Bucks Electron App, intercept and use native publishing
@@ -175,48 +221,44 @@ export const uploadFile = async (formData: FormData) => {
                 const description = (formData.get('description') as string) || '';
                 const type = (formData.get('upload_type') as string) || 'post';
 
-                // 1. Publish locally to embedded Helia
                 const arrayBuffer = await file.arrayBuffer();
                 const content = Array.from(new Uint8Array(arrayBuffer));
                 const metadata = { name: title, type, description };
 
                 const localPost = await (window as any).bucksAPI.ipfsPublish(content, metadata);
 
-                // 2. Register CID with global Python DAG
                 const registerRes = await api.post('/register_content', {
                     cid: localPost.cid,
-                    title: title,
-                    description: description,
+                    title,
+                    description,
                     upload_type: type,
                     visibility: (formData.get('visibility') as string) || 'public',
-                    thumbnail_cid: null
+                    thumbnail_cid: null,
                 });
 
                 return registerRes.data;
             }
         } catch (err) {
-            console.error('[Native IPFS] Failed to publish locally, falling back to HTTP server upload:', err);
+            console.error('[Native IPFS] Falling back to HTTP upload:', err);
         }
     }
 
     const response = await api.post<{ cid: string; filename: string; success: boolean }>('/upload', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data',
-        },
+        headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
 };
+
+// ─── Profile ──────────────────────────────────────────────────────────────────
 
 export const fetchProfile = async () => {
     const response = await api.get<UserProfile>('/profile');
     const profile = response.data;
 
-    // Inject default stats if missing to prevent UI crashes
     if (!profile.stats) {
         profile.stats = { syncs: 0, contacts: 0, posts: 0, likes: 0 };
     }
 
-    // Cache profile data for UI consistency
     if (typeof window !== 'undefined') {
         if (profile.peer_id) localStorage.setItem('bucks_peer_id', profile.peer_id);
         localStorage.setItem('bucks_user_profile', JSON.stringify(profile));
@@ -230,32 +272,6 @@ export const fetchUserProfile = async (peer_id: string) => {
     return response.data;
 };
 
-export const fetchAggregatedFeed = async () => {
-    const response = await api.get<{ library: LibraryItem[] }>('/feed/aggregated');
-    return response.data;
-};
-
-export const fetchUserFeed = async (peer_id: string) => {
-    const response = await api.get<{ library: LibraryItem[] }>(`/feed/user/${peer_id}`);
-    return response.data.library;
-};
-
-
-export const deletePost = async (cid: string) => {
-    const response = await api.delete<{ success: boolean; message: string }>(`/library/${cid}`);
-    return response.data;
-};
-
-export const updatePost = async (cid: string, title: string, description: string) => {
-    const formData = new FormData();
-    formData.append('title', title);
-    formData.append('description', description);
-    const response = await api.put<{ success: boolean; post: LibraryItem }>(`/library/${cid}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return response.data;
-};
-
 export const updateProfile = async (data: {
     username?: string;
     handle?: string;
@@ -266,17 +282,16 @@ export const updateProfile = async (data: {
 }) => {
     const formData = new FormData();
     if (data.username) formData.append('username', data.username);
-    if (data.handle) formData.append('handle', data.handle);
-    if (data.bio) formData.append('bio', data.bio);
-    if (data.location) formData.append('location', data.location);
-    if (data.avatar) formData.append('avatar', data.avatar);
-    if (data.banner) formData.append('banner', data.banner);
+    if (data.handle)   formData.append('handle',   data.handle);
+    if (data.bio)      formData.append('bio',       data.bio);
+    if (data.location) formData.append('location',  data.location);
+    if (data.avatar)   formData.append('avatar',    data.avatar);
+    if (data.banner)   formData.append('banner',    data.banner);
 
     const response = await api.post<{ success: boolean; profile: UserProfile }>('/profile', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
     });
 
-    // Update local cache after successful save
     if (response.data.success && typeof window !== 'undefined') {
         const profile = response.data.profile;
         if (profile.peer_id) localStorage.setItem('bucks_peer_id', profile.peer_id);
@@ -286,17 +301,32 @@ export const updateProfile = async (data: {
     return response.data;
 };
 
-/**
- * Logout: Clear local identity and redirect to login
- */
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
 export const logout = () => {
     if (typeof window !== 'undefined') {
-        localStorage.removeItem('bucks_identity');
         localStorage.removeItem('bucks_peer_id');
-        // Clear anything else relevant
+        localStorage.removeItem('bucks_identity_secret');
+        localStorage.removeItem('bucks_identity');
+        localStorage.removeItem('bucks_user_profile');
+        localStorage.removeItem('isAuthenticated');
         window.location.href = '/login';
     }
 };
+
+// ─── Feed ─────────────────────────────────────────────────────────────────────
+
+export const fetchAggregatedFeed = async () => {
+    const response = await api.get<{ library: LibraryItem[] }>('/feed/aggregated');
+    return response.data;
+};
+
+export const fetchUserFeed = async (peer_id: string) => {
+    const response = await api.get<{ library: LibraryItem[] }>(`/feed/user/${peer_id}`);
+    return response.data.library;
+};
+
+// ─── Social Graph ─────────────────────────────────────────────────────────────
 
 export const fetchFollowing = async () => {
     const response = await api.get<{ following: any[]; count: number }>('/following');
@@ -332,21 +362,14 @@ export const acceptConnectionRequest = async (peerId: string) => {
     return response.data;
 };
 
+// ─── Discovery ────────────────────────────────────────────────────────────────
+
 export const discoverPeers = async () => {
     const response = await api.get('/peers/discover');
     return response.data;
 };
 
-export interface Notification {
-    id: number;
-    user_peer_id: string;
-    type: 'message' | 'connection' | 'mention' | 'follow';
-    title: string;
-    message: string;
-    link: string;
-    timestamp: string;
-    is_read: boolean;
-}
+// ─── Notifications ────────────────────────────────────────────────────────────
 
 export const fetchNotifications = async () => {
     const response = await api.get<{ notifications: Notification[] }>('/notifications');
@@ -357,27 +380,33 @@ export const markNotificationsRead = async (notificationId?: number) => {
     if (notificationId) {
         const response = await api.post(`/notifications/${notificationId}/read`);
         return response.data;
-    } else {
-        const response = await api.post('/notifications/read-all');
-        return response.data;
     }
+    const response = await api.post('/notifications/read-all');
+    return response.data;
 };
+
+// ─── IPFS ─────────────────────────────────────────────────────────────────────
 
 export const getIPFSUrl = (cid: string) => {
     if (!cid) return '';
-    const host = getHost();
-    return `http://${host}:8080/ipfs/${cid}`;
+    const configured = process.env.NEXT_PUBLIC_IPFS_GATEWAY;
+    if (configured) return `${normalizeBaseUrl(configured)}/ipfs/${cid}`;
+    // Public IPFS gateway fallback for web deployments
+    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+        return `https://ipfs.io/ipfs/${cid}`;
+    }
+    return `http://${getHost()}:8080/ipfs/${cid}`;
 };
 
+// ─── Search / Agent ───────────────────────────────────────────────────────────
+
 export const fetchAgentResponse = async (query: string): Promise<string> => {
-    // Basic implementation that routes to search or returns a simple response
-    // since the dedicated agent endpoint is missing in this version.
     try {
         const response = await api.post<{ results: any[] }>('/search', { query });
         const count = response.data.results?.length || 0;
-        return `Command received: ${query}. I found ${count} relevant items in the swarm index.`;
+        return `Command received: ${query}. Found ${count} relevant items in the swarm index.`;
     } catch (e) {
-        console.error("Agent Error", e);
+        console.error('Agent Error', e);
         return "I'm having trouble connecting to the swarm agent right now.";
     }
 };

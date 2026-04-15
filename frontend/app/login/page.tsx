@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FaIdCard, FaFileImport, FaCircleCheck, FaDownload, FaArrowRight, FaFingerprint } from 'react-icons/fa6';
 import Link from 'next/link';
 import { useToast } from '@/components/Toast';
+import { getApiBaseUrl } from '@/lib/api';
 
 export default function LoginPage() {
     const { showToast } = useToast();
@@ -37,7 +38,7 @@ export default function LoginPage() {
                 }
             } else {
                 console.warn("Native environment not detected. Falling back to decoupled backend for DID generation.");
-                const response = await fetch(`http://${window.location.hostname}:8000/api/auth/generate-identity`, {
+                const response = await fetch(`${getApiBaseUrl()}/auth/generate-identity`, {
                     method: 'POST'
                 });
                 const data = await response.json();

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import StoryCircles from '@/components/StoryCircles';
 import PostCard from '@/components/PostCard';
@@ -13,7 +13,7 @@ import {
 } from 'react-icons/fa6';
 import Link from 'next/link';
 
-export default function Feed() {
+function FeedContent() {
   const searchParams = useSearchParams();
   const filterCid = searchParams.get('cid');
   const filterAuthor = searchParams.get('author');
@@ -22,7 +22,6 @@ export default function Feed() {
   const [following, setFollowing] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filter states
   const [filterType, setFilterType] = useState<'all' | 'images' | 'videos' | 'files'>('all');
   const [source, setSource] = useState<'global' | 'following'>('global');
   const [sortBy, setSortBy] = useState<'newest' | 'popular'>('newest');
@@ -39,7 +38,6 @@ export default function Feed() {
         ]);
 
         setLibrary(feedData.library || []);
-        // extract peer IDs from the following records if they are objects, but actually let's map them safely
         setFollowing((followingData || []).map((f: any) => f.following_peer_id || f));
         setInteractions(interactionsRes || {});
       } catch (error) {
@@ -57,20 +55,17 @@ export default function Feed() {
       if (filterCid && item.cid !== filterCid) return false;
       if (filterAuthor && item.author !== filterAuthor) return false;
 
-      // Type Filter
       if (filterType === 'images') {
-        const isImage = item.filename.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/i);
-        if (!isImage) return false;
+        if (!item.filename?.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/i)) return false;
       }
       if (filterType === 'videos') {
-        if (!item.filename.toLowerCase().endsWith('.mp4')) return false;
+        if (!item.filename?.toLowerCase().match(/\.(mp4|webm|mov)$/i)) return false;
       }
       if (filterType === 'files') {
-        const isMedia = item.filename.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|mp4)$/i);
-        if (isMedia || item.type !== 'file') return false;
+        const isMedia = item.filename?.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|mp4|webm|mov)$/i);
+        if (isMedia) return false;
       }
 
-      // Source Filter
       if (source === 'following') {
         if (!following.includes(item.author)) return false;
       }
@@ -82,9 +77,9 @@ export default function Feed() {
         return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
       }
       if (sortBy === 'popular') {
-        const engagementA = (interactions[a.cid]?.recommended ? 2 : 0) + (interactions[a.cid]?.comments?.length || 0);
-        const engagementB = (interactions[b.cid]?.recommended ? 2 : 0) + (interactions[b.cid]?.comments?.length || 0);
-        return engagementB - engagementA;
+        const engA = (interactions[a.cid]?.likes_count || 0) + (interactions[a.cid]?.comments?.length || 0);
+        const engB = (interactions[b.cid]?.likes_count || 0) + (interactions[b.cid]?.comments?.length || 0);
+        return engB - engA;
       }
       return 0;
     });
@@ -111,7 +106,7 @@ export default function Feed() {
     <div className="flex flex-col min-h-full">
       <StoryCircles library={library} />
 
-      {/* Advanced Filter Bar */}
+      {/* Filter Bar */}
       <div className="bg-white border-b border-gray-100 flex items-center justify-between px-4 py-2 sticky top-0 z-30 shadow-sm">
         <div className="flex items-center space-x-1">
           {[
@@ -148,56 +143,48 @@ export default function Feed() {
           {showFilterMenu && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowFilterMenu(false)}></div>
-              <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-100 rounded-2xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+              <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-100 rounded-2xl shadow-2xl py-2 z-50">
                 <div className="px-4 py-2 border-b border-gray-50">
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Feed Source</span>
                   <div className="flex flex-col mt-2 space-y-1">
-                    <button
-                      onClick={() => { setSource('global'); setShowFilterMenu(false); }}
-                      className="flex items-center justify-between px-2 py-1.5 rounded-lg text-sm hover:bg-gray-50 text-gray-700 transition-colors"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <FaEarthAmericas className={`text-gray-400 ${source === 'global' ? 'text-primary' : ''}`} />
-                        <span className={source === 'global' ? 'font-bold' : ''}>Global Swarm</span>
-                      </div>
-                      {source === 'global' && <FaCheck className="text-primary text-[10px]" />}
-                    </button>
-                    <button
-                      onClick={() => { setSource('following'); setShowFilterMenu(false); }}
-                      className="flex items-center justify-between px-2 py-1.5 rounded-lg text-sm hover:bg-gray-50 text-gray-700 transition-colors"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <FaUsers className={`text-gray-400 ${source === 'following' ? 'text-primary' : ''}`} />
-                        <span className={source === 'following' ? 'font-bold' : ''}>Following Only</span>
-                      </div>
-                      {source === 'following' && <FaCheck className="text-primary text-[10px]" />}
-                    </button>
+                    {[
+                      { id: 'global', icon: <FaEarthAmericas />, label: 'Global Swarm' },
+                      { id: 'following', icon: <FaUsers />, label: 'Following Only' },
+                    ].map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => { setSource(s.id as any); setShowFilterMenu(false); }}
+                        className="flex items-center justify-between px-2 py-1.5 rounded-lg text-sm hover:bg-gray-50 text-gray-700 transition-colors"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span className={source === s.id ? 'text-primary' : 'text-gray-400'}>{s.icon}</span>
+                          <span className={source === s.id ? 'font-bold' : ''}>{s.label}</span>
+                        </div>
+                        {source === s.id && <FaCheck className="text-primary text-[10px]" />}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
                 <div className="px-4 py-2">
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sort By</span>
                   <div className="flex flex-col mt-2 space-y-1">
-                    <button
-                      onClick={() => { setSortBy('newest'); setShowFilterMenu(false); }}
-                      className="flex items-center justify-between px-2 py-1.5 rounded-lg text-sm hover:bg-gray-50 text-gray-700 transition-colors"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <FaArrowDownShortWide className={`text-gray-400 ${sortBy === 'newest' ? 'text-primary' : ''}`} />
-                        <span className={sortBy === 'newest' ? 'font-bold' : ''}>Latest First</span>
-                      </div>
-                      {sortBy === 'newest' && <FaCheck className="text-primary text-[10px]" />}
-                    </button>
-                    <button
-                      onClick={() => { setSortBy('popular'); setShowFilterMenu(false); }}
-                      className="flex items-center justify-between px-2 py-1.5 rounded-lg text-sm hover:bg-gray-50 text-gray-700 transition-colors"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <FaArrowUpWideShort className={`text-gray-400 ${sortBy === 'popular' ? 'text-primary' : ''}`} />
-                        <span className={sortBy === 'popular' ? 'font-bold' : ''}>Top Engagement</span>
-                      </div>
-                      {sortBy === 'popular' && <FaCheck className="text-primary text-[10px]" />}
-                    </button>
+                    {[
+                      { id: 'newest', icon: <FaArrowDownShortWide />, label: 'Latest First' },
+                      { id: 'popular', icon: <FaArrowUpWideShort />, label: 'Top Engagement' },
+                    ].map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => { setSortBy(s.id as any); setShowFilterMenu(false); }}
+                        className="flex items-center justify-between px-2 py-1.5 rounded-lg text-sm hover:bg-gray-50 text-gray-700 transition-colors"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span className={sortBy === s.id ? 'text-primary' : 'text-gray-400'}>{s.icon}</span>
+                          <span className={sortBy === s.id ? 'font-bold' : ''}>{s.label}</span>
+                        </div>
+                        {sortBy === s.id && <FaCheck className="text-primary text-[10px]" />}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -213,13 +200,14 @@ export default function Feed() {
               Showing {filterCid ? 'selected post' : `posts by ${filterAuthor}`}
             </span>
             <button
-              onClick={() => window.location.href = '/feed'}
+              onClick={() => { window.history.replaceState(null, '', '/feed'); window.location.reload(); }}
               className="text-[10px] font-bold text-primary uppercase"
             >
               Clear Filter
             </button>
           </div>
         )}
+
         {filteredLibrary.length === 0 ? (
           <div className="text-center py-20 bg-white m-4 rounded-3xl border border-dashed border-gray-200">
             <div className="text-4xl mb-4">🛸</div>
@@ -252,5 +240,17 @@ export default function Feed() {
         <FaPlus />
       </Link>
     </div>
+  );
+}
+
+export default function Feed() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    }>
+      <FeedContent />
+    </Suspense>
   );
 }

@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "FastAPI Backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd backend && uvicorn main:app --reload --port 8000"],
+      "port": 8000
+    },
+    {
+      "name": "Next.js Frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "Bucks App (SvelteKit)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "bucks-app", "run", "dev"],
+      "port": 1420
+    },
+    {
+      "name": "Tauri Desktop",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "bucks-app", "run", "launch:tauri"],
+      "port": 1420
+    }
+  ]
+}

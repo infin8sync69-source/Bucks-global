@@ -16,8 +16,13 @@ import asyncio
 import random
 from pydantic import BaseModel
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
 from database import get_db_connection, init_db
-from werkzeug.utils import secure_filename
 import re
 import hmac
 import hashlib
@@ -36,6 +41,12 @@ rpc_client: Optional[IPFSRPCClient] = None
 social_dag: Optional[SocialDAG] = None
 discovery_hub: Optional[DiscoveryHub] = None
 
+def _env_int(key: str, default: int) -> int:
+    try:
+        return int(os.getenv(key, str(default)))
+    except Exception:
+        return default
+
 # Initialize FastAPI app
 app = FastAPI(
     title="IPFS Social Feed API",
@@ -43,10 +54,19 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS configuration - allow frontend to connect
+# CORS configuration
+# In production, restrict to your frontend domain via ALLOWED_ORIGINS env var.
+# Example: ALLOWED_ORIGINS=https://bucks.global,https://www.bucks.global
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS: list[str] = (
+    [o.strip() for o in _raw_origins.split(",") if o.strip()]
+    if _raw_origins
+    else ["*"]  # open during local development / when not set
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,39 +75,46 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup."""
-    # Initialize database (creates tables on first run)
-    init_db()
+    global p2p_client, rpc_client, social_dag, discovery_hub
 
-    # Initialize P2P Client
-    global p2p_client, rpc_client, social_dag
-    
-    # Global Scale Infrastructure
-    rpc_client = IPFSRPCClient()
-    social_dag = SocialDAG(rpc_client)
-    discovery_hub = DiscoveryHub(rpc_client, social_dag, get_db_connection)
-    
-    p2p_client = P2PClient(IPFS_BIN)
-    
-    # Get Peer ID (run in thread to avoid blocking)
+    # ── 1. Database ──────────────────────────────────────────────────────────
     try:
+        init_db()
+    except Exception as e:
+        print(f"⚠️  Database init failed: {e}")
+        # Non-fatal — some endpoints will fail but server stays up
+
+    # ── 2. IPFS RPC client (used for content operations) ─────────────────────
+    rpc_host = os.getenv("IPFS_RPC_HOST", "http://127.0.0.1")
+    rpc_port = _env_int("IPFS_RPC_PORT", 5001)
+    try:
+        rpc_client = IPFSRPCClient(host=rpc_host, port=rpc_port)
+        social_dag = SocialDAG(rpc_client)
+        discovery_hub = DiscoveryHub(rpc_client, social_dag, get_db_connection)
+        print(f"✅ IPFS RPC client ready at {rpc_host}:{rpc_port}")
+    except Exception as e:
+        print(f"⚠️  IPFS RPC init failed (uploads/IPNS will be unavailable): {e}")
+
+    # ── 3. P2P PubSub (optional — requires IPFS daemon with pubsub enabled) ──
+    try:
+        p2p_client = P2PClient(IPFS_BIN)
         my_peer_id = await asyncio.to_thread(get_my_peer_id)
-        print(f"P2P Node Identity: {my_peer_id}")
-        
-        # Subscribe to my inbox
+        print(f"✅ P2P Node Identity: {my_peer_id}")
+
         inbox_topic = f"/app/inbox/{my_peer_id}"
         await p2p_client.subscribe(inbox_topic, handle_inbox_message)
-        print(f"Subscribed to P2P Inbox: {inbox_topic}")
+        print(f"✅ Subscribed to P2P Inbox: {inbox_topic}")
 
-        # Global Discovery Subscriptions
-        await p2p_client.subscribe("/app/discovery", discovery_hub.handle_discovery_message)
-        await p2p_client.subscribe("/app/feed/updates", discovery_hub.handle_feed_update)
-        print("Subscribed to Global Discovery Topics")
+        if discovery_hub:
+            await p2p_client.subscribe("/app/discovery", discovery_hub.handle_discovery_message)
+            await p2p_client.subscribe("/app/feed/updates", discovery_hub.handle_feed_update)
+            print("✅ Subscribed to global discovery topics")
 
-        # Start Periodic Heartbeat
         asyncio.create_task(periodic_heartbeat())
-        
+
     except Exception as e:
-        print(f"Failed to initialize P2P: {e}")
+        print(f"⚠️  P2P/PubSub unavailable (real-time features disabled): {e}")
+        print("   → The REST API will still serve requests using the database.")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -180,6 +207,14 @@ async def auth_middleware(request: Request, call_next):
 
 # ==================== Helper Functions ====================
 
+def secure_filename(filename: str) -> str:
+    """
+    Minimal filename sanitizer (Werkzeug-like) to keep uploads safe across platforms.
+    """
+    name = os.path.basename(filename or "")
+    name = re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("._")
+    return name or "file"
+
 def generate_pdf_thumbnail(pdf_path: str) -> Optional[str]:
     """Generate a thumbnail for a PDF file using qlmanage (macOS)"""
     try:
@@ -201,8 +236,17 @@ def generate_pdf_thumbnail(pdf_path: str) -> Optional[str]:
 
 # Configuration
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-IPFS_BIN = os.path.join(BASE_DIR, "bin/ipfs")
-CLUSTER_CTL = os.path.join(BASE_DIR, "bin/ipfs-cluster-ctl")
+
+def resolve_bin(env_key: str, local_path: str, fallback_bin: str) -> str:
+    configured = os.getenv(env_key)
+    if configured:
+        return configured
+    if os.path.exists(local_path) and os.access(local_path, os.X_OK):
+        return local_path
+    return shutil.which(fallback_bin) or fallback_bin
+
+IPFS_BIN = resolve_bin("IPFS_BIN", os.path.join(BASE_DIR, "bin/ipfs"), "ipfs")
+CLUSTER_CTL = resolve_bin("IPFS_CLUSTER_CTL", os.path.join(BASE_DIR, "bin/ipfs-cluster-ctl"), "ipfs-cluster-ctl")
 LIBRARY_FILE = os.path.join(BASE_DIR, "library.json")
 INTERACTIONS_FILE = os.path.join(BASE_DIR, "local_interactions.json")
 USER_PROFILE_FILE = os.path.join(BASE_DIR, "user_profile.json")
@@ -270,6 +314,13 @@ def run_command(command: Union[str, List[str]]) -> Optional[str]:
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         print(f"Command failed: {e.stderr}")
+        return None
+    except FileNotFoundError:
+        cmd = command[0] if isinstance(command, list) and command else str(command)
+        print(f"Command not found: {cmd}")
+        return None
+    except OSError as e:
+        print(f"Command OS error: {e}")
         return None
 
 async def run_command_async(command: Union[str, List[str]]) -> Optional[str]:
@@ -376,6 +427,11 @@ def save_json(filepath: str, data):
 async def root():
     """API root endpoint"""
     return {"message": "IPFS Social Feed API", "version": "1.0.0"}
+
+@app.get("/health")
+async def health():
+    """Health-check for Railway / Render / uptime monitors."""
+    return {"status": "ok", "ipfs": rpc_client is not None, "p2p": p2p_client is not None}
 
 @app.post("/api/auth/generate-identity")
 async def generate_identity():
@@ -935,9 +991,9 @@ async def get_post_interactions(cid: str, request: Request):
     conn = get_db_connection()
     
     # Counts
-    likes = conn.execute("SELECT COUNT(*) FROM interactions WHERE post_cid = ? AND type = 'like'", (cid,)).fetchone()[0]
-    dislikes = conn.execute("SELECT COUNT(*) FROM interactions WHERE post_cid = ? AND type = 'dislike'", (cid,)).fetchone()[0]
-    views = conn.execute("SELECT COUNT(*) FROM interactions WHERE post_cid = ? AND type = 'view'", (cid,)).fetchone()[0]
+    likes = conn.execute("SELECT COUNT(*) as count FROM interactions WHERE post_cid = ? AND type = 'like'", (cid,)).fetchone()["count"]
+    dislikes = conn.execute("SELECT COUNT(*) as count FROM interactions WHERE post_cid = ? AND type = 'dislike'", (cid,)).fetchone()["count"]
+    views = conn.execute("SELECT COUNT(*) as count FROM interactions WHERE post_cid = ? AND type = 'view'", (cid,)).fetchone()["count"]
     
     # My status
     my_like = conn.execute("SELECT 1 FROM interactions WHERE post_cid = ? AND user_peer_id = ? AND type = 'like'", (cid, peer_id)).fetchone()
@@ -989,8 +1045,8 @@ async def toggle_like(cid: str, request: Request):
     conn.commit()
     
     # Get Updated Counts
-    likes = c.execute("SELECT COUNT(*) FROM interactions WHERE post_cid = ? AND type = 'like'", (cid,)).fetchone()[0]
-    dislikes = c.execute("SELECT COUNT(*) FROM interactions WHERE post_cid = ? AND type = 'dislike'", (cid,)).fetchone()[0]
+    likes = c.execute("SELECT COUNT(*) as count FROM interactions WHERE post_cid = ? AND type = 'like'", (cid,)).fetchone()["count"]
+    dislikes = c.execute("SELECT COUNT(*) as count FROM interactions WHERE post_cid = ? AND type = 'dislike'", (cid,)).fetchone()["count"]
     conn.close()
     
     # Update manifest
@@ -1028,8 +1084,8 @@ async def toggle_dislike(cid: str, request: Request):
     conn.commit()
     
     # Get Updated Counts
-    likes = c.execute("SELECT COUNT(*) FROM interactions WHERE post_cid = ? AND type = 'like'", (cid,)).fetchone()[0]
-    dislikes = c.execute("SELECT COUNT(*) FROM interactions WHERE post_cid = ? AND type = 'dislike'", (cid,)).fetchone()[0]
+    likes = c.execute("SELECT COUNT(*) as count FROM interactions WHERE post_cid = ? AND type = 'like'", (cid,)).fetchone()["count"]
+    dislikes = c.execute("SELECT COUNT(*) as count FROM interactions WHERE post_cid = ? AND type = 'dislike'", (cid,)).fetchone()["count"]
     conn.close()
     
     # Update manifest
@@ -2189,7 +2245,7 @@ async def add_guardian(peer_id: str = Form(...), request: Request = None):
     c = conn.cursor()
     
     # Check count
-    count = c.execute("SELECT COUNT(*) FROM guardians WHERE user_peer_id = ?", (my_peer_id,)).fetchone()[0]
+    count = c.execute("SELECT COUNT(*) as count FROM guardians WHERE user_peer_id = ?", (my_peer_id,)).fetchone()["count"]
     if count >= 7:
         conn.close()
         raise HTTPException(status_code=400, detail="Maximum 7 guardians allowed")
@@ -2328,12 +2384,25 @@ async def start_recovery(old_peer_id: str = Form(...), new_peer_id: str = Form(.
     
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("""
-        INSERT INTO recovery_requests (old_peer_id, new_peer_id, timestamp, status)
-        VALUES (?, ?, ?, 'pending')
-    """, (old_peer_id, new_peer_id, timestamp))
+    if conn._is_postgres:
+        req_id = c.execute(
+            """
+            INSERT INTO recovery_requests (old_peer_id, new_peer_id, timestamp, status)
+            VALUES (?, ?, ?, 'pending')
+            RETURNING id
+            """,
+            (old_peer_id, new_peer_id, timestamp),
+        ).fetchone()["id"]
+    else:
+        c.execute(
+            """
+            INSERT INTO recovery_requests (old_peer_id, new_peer_id, timestamp, status)
+            VALUES (?, ?, ?, 'pending')
+            """,
+            (old_peer_id, new_peer_id, timestamp),
+        )
+        req_id = c.lastrowid
     conn.commit()
-    req_id = c.lastrowid
     conn.close()
     
     return {"success": True, "request_id": str(req_id)}
@@ -2361,7 +2430,7 @@ async def approve_recovery(request_id: str = Form(...), guardian_peer_id: str = 
             conn.commit()
             
         # Check count
-        count = c.execute("SELECT COUNT(*) FROM recovery_approvals WHERE request_id = ?", (rid,)).fetchone()[0]
+        count = c.execute("SELECT COUNT(*) as count FROM recovery_approvals WHERE request_id = ?", (rid,)).fetchone()["count"]
         if count >= 3: # Threshold
              c.execute("UPDATE recovery_requests SET status = 'approved' WHERE id = ?", (rid,))
              conn.commit()

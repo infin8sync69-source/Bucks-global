@@ -3,6 +3,8 @@
 ## Overview
 Bucks Global is an innovative social platform built on the IPFS (InterPlanetary File System) protocol, enabling decentralized and resilient data storage and sharing. This README provides comprehensive documentation of the platform's architecture, features, setup instructions, and technical specifications.
 
+Quick start: see `LAUNCH.md`.
+
 ## Table of Contents
 - [Architecture](#architecture)
 - [Features](#features)
@@ -32,9 +34,9 @@ The platform leverages a combination of REST APIs and WebSockets for real-time c
 To set up the Bucks Global environment locally, follow these steps:
 
 ### Prerequisites
-- Node.js (v14 or higher)
-- npm (v6 or higher)
-- IPFS Node (running locally or access to a remote node)
+- Node.js (v18+ recommended)
+- Python (v3.10+ recommended)
+- IPFS daemon running locally (or reachable via API)
 
 ### Steps
 1. **Clone the Repository**:
@@ -42,22 +44,34 @@ To set up the Bucks Global environment locally, follow these steps:
    git clone https://github.com/infin8sync69-source/Bucks-global.git
    cd Bucks-global
    ```
-2. **Install Dependencies**:
+2. **Start IPFS**:
    ```
+   ipfs daemon
+   ```
+3. **Start the Backend (FastAPI)**:
+   ```
+   cd backend
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+4. **Start the Frontend (Next.js)**:
+   ```
+   cd ../frontend
    npm install
+   npm run dev
    ```
-3. **Configure IPFS**:
-   Ensure your IPFS node is running. You can use the default configuration or modify it as per your requirements.
-4. **Start the Application**:
-   ```
-   npm start
-   ```
-5. **Access the Platform**: Open your browser and navigate to `http://localhost:3000`.
+5. **Access the Platform**: Open `http://localhost:3000`.
+
+### Hybrid Mode (Supabase)
+If you want managed Postgres persistence for production, set `DATABASE_URL` (Supabase connection string) for the backend and apply the schema under `supabase/migrations/`.
 
 ## Technical Specifications
-- **Built with**: React, Node.js, Express, IPFS
-- **Database**: MongoDB (or IPFS for storage)
-- **Deployment**: Docker containers for microservices architecture
+- **Frontend**: Next.js
+- **Backend**: FastAPI
+- **Storage**: IPFS (content), optional Supabase/Postgres (metadata)
+- **Deployment**: Vercel/Render/VPS + Supabase (optional)
 - **API**: RESTful API endpoints for interaction with the backend services.
 
 ## Contributions

@@ -5,6 +5,7 @@ import { FaXmark, FaUserPlus, FaSpinner } from 'react-icons/fa6';
 import SearchInput from './SearchInput';
 import Avatar from './Avatar';
 import Link from 'next/link';
+import api from '@/lib/api';
 
 interface User {
     peer_id: string;
@@ -17,7 +18,7 @@ interface User {
 interface NewChatModalProps {
     isOpen: boolean;
     onClose: () => void;
-    following: any[]; // User list from parent
+    following: any[];
 }
 
 const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose, following }) => {
@@ -25,64 +26,49 @@ const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose, following 
     const [results, setResults] = useState<User[]>([]);
     const [isSearching, setIsSearching] = useState(false);
 
-    // Initialize results with following list when modal opens or query is empty
+    const mapFollowing = (list: any[]): User[] =>
+        list.map(f => ({
+            peer_id: f.peer_id,
+            username: f.username || '',
+            handle: f.handle || '',
+            avatar: f.avatar,
+            bio: f.bio,
+        }));
+
     useEffect(() => {
         if (!isOpen) {
             setQuery('');
             setResults([]);
             return;
         }
-
         if (!query.trim()) {
-            setResults(following.map(f => ({
-                peer_id: f.peer_id,
-                username: f.username,
-                handle: f.handle || '',
-                avatar: f.avatar,
-                bio: f.bio
-            })));
+            setResults(mapFollowing(following));
         }
-    }, [isOpen, query, following]);
+    }, [isOpen, following]);
 
     const handleSearch = async (searchQuery: string) => {
         setQuery(searchQuery);
 
         if (!searchQuery.trim()) {
-            setResults(following.map(f => ({
-                peer_id: f.peer_id,
-                username: f.username,
-                handle: f.handle || '',
-                avatar: f.avatar,
-                bio: f.bio
-            })));
+            setResults(mapFollowing(following));
             return;
         }
 
         setIsSearching(true);
         try {
-            const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-            // Use existing search API
-            const response = await fetch(`http://${host}:8000/api/search`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: searchQuery })
-            });
-            const data = await response.json();
-
-            // Filter only users and map to User interface
-            const userResults = (data.results || [])
+            const { data } = await api.post<{ results: any[] }>('/search', { query: searchQuery });
+            const userResults: User[] = (data.results || [])
                 .filter((r: any) => r.type === 'user')
                 .map((r: any) => ({
                     peer_id: r.peer_id,
                     username: r.name,
-                    handle: r.author,
+                    handle: r.author || '',
                     avatar: r.avatar,
-                    bio: r.description
+                    bio: r.description,
                 }));
-
             setResults(userResults);
         } catch (error) {
-            console.error("Search failed", error);
+            console.error('Search failed', error);
         } finally {
             setIsSearching(false);
         }
@@ -91,8 +77,8 @@ const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose, following 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-gray-100">
                     <h3 className="text-lg font-bold flex items-center">
@@ -114,7 +100,7 @@ const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose, following 
                     />
                 </div>
 
-                {/* Results List */}
+                {/* Results */}
                 <div className="max-h-[60vh] overflow-y-auto p-2">
                     {isSearching ? (
                         <div className="flex items-center justify-center py-12 text-primary">
@@ -126,20 +112,24 @@ const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose, following 
                                 <Link
                                     key={user.peer_id}
                                     href={`/messages/${user.peer_id}`}
-                                    onClick={onClose} // Close modal on selection
+                                    onClick={onClose}
                                     className="flex items-center p-3 hover:bg-gray-50 rounded-xl transition-colors group"
                                 >
                                     <Avatar src={user.avatar} className="w-10 h-10 mr-3" />
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center justify-between">
                                             <h4 className="font-semibold text-gray-900 truncate group-hover:text-primary transition-colors">
-                                                {user.username}
+                                                {user.username || 'Unknown User'}
                                             </h4>
                                             {following.some(f => f.peer_id === user.peer_id) && (
-                                                <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Following</span>
+                                                <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full ml-2">
+                                                    Following
+                                                </span>
                                             )}
                                         </div>
-                                        <p className="text-xs text-gray-500 truncate">@{user.handle}</p>
+                                        {user.handle && (
+                                            <p className="text-xs text-gray-500 truncate">@{user.handle}</p>
+                                        )}
                                     </div>
                                 </Link>
                             ))}
