@@ -12,6 +12,7 @@ import {
   FaEarthAmericas, FaUsers, FaArrowUpWideShort
 } from 'react-icons/fa6';
 import Link from 'next/link';
+import { G } from '@/components/ui/Glass';
 
 function FeedContent() {
   const searchParams = useSearchParams();
@@ -112,7 +113,10 @@ function FeedContent() {
       <StoryCircles library={library} />
 
       {/* Filter Bar */}
-      <div className="bg-white border-b border-gray-100 flex items-center justify-between px-4 py-2 sticky top-0 z-30 shadow-sm">
+      <div
+        className="flex items-center justify-between px-4 py-2 sticky top-0 z-30"
+        style={{ ...G.nav, borderBottom: "1px solid rgba(255,255,255,0.38)" }}
+      >
         <div className="flex items-center space-x-1">
           {[
             { id: 'all', icon: <FaListUl />, label: 'All' },
@@ -123,9 +127,17 @@ function FeedContent() {
             <button
               key={type.id}
               onClick={() => setFilterType(type.id as any)}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all ${filterType === type.id
-                ? 'bg-primary text-white shadow-md shadow-primary/20 scale-105'
-                : 'text-gray-400 hover:bg-gray-100'}`}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all"
+              style={filterType === type.id ? {
+                background: "linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)",
+                color: "#fff",
+                boxShadow: "0 4px 16px rgba(106,0,255,0.35)",
+                transform: "scale(1.05)",
+              } : {
+                ...G.btn,
+                color: "rgba(100,0,200,0.55)",
+                borderRadius: 9999,
+              }}
             >
               {type.icon}
               <span className="hidden sm:inline">{type.label}</span>
@@ -148,7 +160,10 @@ function FeedContent() {
           {showFilterMenu && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowFilterMenu(false)}></div>
-              <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-100 rounded-2xl shadow-2xl py-2 z-50">
+              <div
+                className="absolute right-0 mt-2 w-56 rounded-2xl py-2 z-50"
+                style={{ ...G.sheet, borderRadius: 16 }}
+              >
                 <div className="px-4 py-2 border-b border-gray-50">
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Feed Source</span>
                   <div className="flex flex-col mt-2 space-y-1">
@@ -198,7 +213,7 @@ function FeedContent() {
         </div>
       </div>
 
-      <div className="flex-1 bg-gray-50">
+      <div className="flex-1">
         {(filterCid || filterAuthor) && (
           <div className="px-4 py-2 bg-purple-50 flex items-center justify-between border-b border-purple-100">
             <span className="text-xs font-medium text-primary">
@@ -214,7 +229,10 @@ function FeedContent() {
         )}
 
         {backendOffline && (
-          <div className="mx-4 mt-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start space-x-3">
+          <div
+            className="mx-4 mt-4 p-4 rounded-2xl flex items-start space-x-3"
+            style={{ ...G.medium, borderRadius: 16 }}
+          >
             <span className="text-xl">📡</span>
             <div>
               <p className="text-sm font-bold text-amber-800">Backend node is offline</p>

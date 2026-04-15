@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FaIdCard, FaFileImport, FaCircleCheck, FaDownload, FaArrowRight, FaFingerprint } from 'react-icons/fa6';
 import Link from 'next/link';
 import { useToast } from '@/components/Toast';
+import { G, Iris, Specular, PurpleButton } from '@/components/ui/Glass';
 
 export default function LoginPage() {
     const { showToast } = useToast();
@@ -124,8 +125,13 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-50 via-white to-purple-50">
-            <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-gray-100 p-8">
+        <div className="min-h-screen flex flex-col items-center justify-center p-6">
+            <div
+                className="w-full max-w-md p-8"
+                style={{ ...G.heavy, borderRadius: 32, position: "relative", overflow: "hidden" }}
+            >
+                <Iris />
+                <Specular />
                 {/* Logo Section */}
                 <div className="flex flex-col items-center mb-10 text-center">
                     <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-white text-3xl mb-4 shadow-lg shadow-primary/30">
@@ -216,12 +222,12 @@ export default function LoginPage() {
                                 <span>Download Identity File</span>
                             </button>
 
-                            <button
+                            <PurpleButton
                                 onClick={handleComplete}
-                                className="w-full py-4 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
+                                style={{ width: "100%", padding: "16px", borderRadius: 12, fontSize: 15 }}
                             >
                                 Enter Application
-                            </button>
+                            </PurpleButton>
                         </div>
                     </div>
                 )}

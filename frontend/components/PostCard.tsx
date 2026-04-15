@@ -10,6 +10,7 @@ import { useToast } from './Toast';
 import Avatar from './Avatar';
 import { FaFilePdf, FaFileZipper, FaFileLines, FaFileCode } from 'react-icons/fa6';
 import FormattedDate from './FormattedDate';
+import { G, Iris, Specular } from '@/components/ui/Glass';
 
 interface PostCardProps {
     item: LibraryItem;
@@ -156,7 +157,11 @@ const PostCard = ({ item, interactions: initialInteractions, onPostDeleted, onPo
 
     if (isDeleting) {
         return (
-            <div className="bg-white border-b border-gray-100 pb-2 mb-2 p-8 text-center animate-fade-in">
+            <div
+                className="pb-2 mb-2 p-8 text-center animate-fade-in"
+                style={{ ...G.card, borderRadius: 20, marginBottom: 12, position: "relative", overflow: "hidden" }}
+            >
+                <Iris opacity={0.5} />
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-500 mx-auto mb-2"></div>
                 <p className="text-sm text-secondary">Deleting post...</p>
             </div>
@@ -164,10 +169,18 @@ const PostCard = ({ item, interactions: initialInteractions, onPostDeleted, onPo
     }
 
     return (
-        <div className="bg-white border-b border-gray-100 pb-2 mb-2 group">
+        <div
+            className="pb-2 mb-3 group"
+            style={{ ...G.card, borderRadius: 20, position: "relative", overflow: "hidden" }}
+        >
+            <Iris opacity={0.5} />
+            <Specular />
             {/* Social Discovery Header */}
             {item.recommended_by && item.recommended_by.length > 0 && (
-                <div className="px-4 py-2 bg-gray-50/50 flex items-center space-x-2 border-b border-gray-50 mb-1">
+                <div
+                    className="px-4 py-2 flex items-center space-x-2 mb-1"
+                    style={{ borderBottom: "1px solid rgba(255,255,255,0.55)", background: "rgba(255,255,255,0.22)" }}
+                >
                     <div className="flex -space-x-2">
                         {item.recommended_by.slice(0, 3).map((name, i) => (
                             <div key={i} className="w-5 h-5 rounded-full bg-primary/10 border-2 border-white flex items-center justify-center text-[8px] font-bold text-primary">
@@ -217,7 +230,10 @@ const PostCard = ({ item, interactions: initialInteractions, onPostDeleted, onPo
                             <FaEllipsis />
                         </button>
                         {showMenu && (
-                            <div className="absolute right-0 top-10 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[160px] z-20 animate-fade-in">
+                            <div
+                                className="absolute right-0 top-10 rounded-xl py-1 min-w-[160px] z-20 animate-fade-in"
+                                style={{ ...G.sheet, borderRadius: 16 }}
+                            >
                                 <button
                                     onClick={() => {
                                         const shareUrl = `${window.location.origin}/feed?cid=${post.cid}`;

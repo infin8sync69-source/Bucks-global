@@ -9,6 +9,7 @@ import {
     FaGear, FaArrowRightFromBracket, FaBars,
 } from 'react-icons/fa6';
 import { logout } from '@/lib/api';
+import { G, Iris, Specular } from '@/components/ui/Glass';
 
 const Sidebar = () => {
     const pathname = usePathname();
@@ -24,7 +25,12 @@ const Sidebar = () => {
     ];
 
     const SidebarContent = () => (
-        <div className="flex flex-col h-full bg-white border-r border-gray-100 p-6">
+        <div
+            className="flex flex-col h-full p-6"
+            style={{ ...G.nav, borderRight: "1px solid rgba(255,255,255,0.62)", position: "relative", overflow: "hidden" }}
+        >
+            <Iris opacity={0.6} />
+            <Specular />
             {/* Logo */}
             <div className="flex items-center justify-center mb-10">
                 <Link href="/" onClick={() => setIsDrawerOpen(false)} className="font-black text-2xl text-primary tracking-tight">
@@ -41,10 +47,16 @@ const Sidebar = () => {
                             key={item.label}
                             href={item.href}
                             onClick={() => setIsDrawerOpen(false)}
-                            className={`flex items-center space-x-4 px-4 py-3 rounded-2xl transition-all duration-200 group active:scale-95 ${isActive
-                                ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                                : 'text-secondary hover:bg-gray-50 hover:text-foreground'
-                                }`}
+                            className="flex items-center space-x-4 px-4 py-3 rounded-2xl transition-all duration-200 group active:scale-95"
+                            style={isActive ? {
+                                background: "linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)",
+                                boxShadow: "0 4px 20px rgba(106,0,255,0.45), inset 0 1px 0 rgba(255,255,255,0.35)",
+                                color: "#fff",
+                                position: "relative",
+                                overflow: "hidden",
+                            } : {
+                                color: "rgba(100,0,200,0.55)",
+                            }}
                         >
                             <span className={`text-xl ${isActive ? 'scale-110' : 'group-hover:scale-110'} transition-transform`}>
                                 {isActive ? (item.activeIcon || item.icon) : item.icon}
@@ -56,7 +68,7 @@ const Sidebar = () => {
             </nav>
 
             {/* Footer Actions */}
-            <div className="mt-auto space-y-1 pt-6 border-t border-gray-100">
+            <div className="mt-auto space-y-1 pt-6" style={{ borderTop: "1px solid rgba(255,255,255,0.38)" }}>
                 <Link
                     href="/settings"
                     onClick={() => setIsDrawerOpen(false)}
@@ -108,7 +120,7 @@ const Sidebar = () => {
             </div>
 
             {/* Static desktop sidebar — always hidden on mobile, visible on desktop */}
-            <div className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-gray-100 z-50">
+            <div className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 w-64 z-50">
                 <SidebarContent />
             </div>
         </>

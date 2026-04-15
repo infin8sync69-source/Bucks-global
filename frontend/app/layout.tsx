@@ -34,6 +34,10 @@ export default function RootLayout({
         suppressHydrationWarning
         className={`${outfit.variable} font-sans bg-transparent text-foreground antialiased`}
       >
+        {/* Animated ambient background blobs */}
+        <div className="glass-blob-1" />
+        <div className="glass-blob-2" />
+        <div className="glass-blob-3" />
         <AuthGuard>
           <ToastProvider>
             <ClientLayout>

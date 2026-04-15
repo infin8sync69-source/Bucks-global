@@ -5,6 +5,7 @@ import { FaPlus, FaXmark, FaChevronLeft, FaChevronRight, FaFileLines, FaDownload
 import Link from 'next/link';
 import Avatar from './Avatar';
 import { LibraryItem, getIPFSUrl } from '../lib/api';
+import { G } from '@/components/ui/Glass';
 
 interface StoryCirclesProps {
     library: LibraryItem[];
@@ -128,7 +129,10 @@ export default function StoryCircles({ library }: StoryCirclesProps) {
     };
 
     return (
-        <div className="w-full py-4 px-4 bg-background border-b border-gray-100 z-40 overflow-hidden">
+        <div
+            className="w-full py-4 px-4 z-40 overflow-hidden"
+            style={{ ...G.nav, borderBottom: "1px solid rgba(255,255,255,0.38)" }}
+        >
             <div className="flex space-x-4 overflow-x-auto pb-4 pt-2 px-4 scrollbar-hide">
                 {/* Add Story / Your Story Button - Always First */}
                 {myAuthorName && library.some(item => item.peer_id === myPeerId) ? (
@@ -136,7 +140,7 @@ export default function StoryCircles({ library }: StoryCirclesProps) {
                         onClick={() => handleOpenStory(myAuthorName)}
                         className="flex flex-col items-center space-y-1 cursor-pointer group focus:outline-none"
                     >
-                        <div className="w-16 h-16 rounded-full p-[2px] bg-gradient-to-tr from-gray-300 via-gray-400 to-gray-500 relative">
+                        <div className="w-16 h-16 rounded-full p-[2px] bg-gradient-to-tr from-purple-400 via-purple-600 to-indigo-600 relative">
                             <div className="w-full h-full rounded-full p-[2px] bg-white overflow-hidden">
                                 <Avatar seed={myPeerId || "me"} size="lg" className="w-full h-full" />
                             </div>
@@ -148,19 +152,28 @@ export default function StoryCircles({ library }: StoryCirclesProps) {
                                 <FaPlus />
                             </Link>
                         </div>
-                        <span className="text-xs font-medium text-gray-500">Your Story</span>
+                        <span
+                            className="text-xs font-bold px-2 py-0.5 rounded-full"
+                            style={{ ...G.btn, color: "#6A00FF", fontSize: 10 }}
+                        >Your Story</span>
                     </button>
                 ) : (
                     <Link href="/create?type=story" className="flex flex-col items-center space-y-1 cursor-pointer group">
                         <div className="w-16 h-16 rounded-full p-[2px] relative">
-                            <div className="w-full h-full rounded-full overflow-hidden border-2 border-dashed border-gray-300 group-hover:border-primary transition-colors flex items-center justify-center bg-gray-50">
+                            <div
+                                className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"
+                                style={{ ...G.light, border: "2px dashed rgba(106,0,255,0.35)" }}
+                            >
                                 <Avatar seed="me" size="lg" className="opacity-50" />
                             </div>
                             <div className="absolute bottom-0 right-0 bg-primary text-white w-5 h-5 rounded-full flex items-center justify-center border-2 border-white text-[10px] shadow-sm">
                                 <FaPlus />
                             </div>
                         </div>
-                        <span className="text-xs font-medium text-gray-500">Your Story</span>
+                        <span
+                            className="text-xs font-bold px-2 py-0.5 rounded-full"
+                            style={{ ...G.btn, color: "#6A00FF", fontSize: 10 }}
+                        >Your Story</span>
                     </Link>
                 )}
 
@@ -186,7 +199,10 @@ export default function StoryCircles({ library }: StoryCirclesProps) {
                                     />
                                 </div>
                             </div>
-                            <span className="text-xs font-medium text-gray-600 w-16 truncate text-center">{author}</span>
+                            <span
+                                className="text-xs font-bold w-16 truncate text-center px-1 py-0.5 rounded-full"
+                                style={{ ...G.btn, color: "#6A00FF", fontSize: 10 }}
+                            >{author}</span>
                         </button>
                     ))}
             </div>
