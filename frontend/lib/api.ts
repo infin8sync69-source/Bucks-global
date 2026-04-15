@@ -101,7 +101,7 @@ export interface LibraryItem {
 export interface Interaction {
     recommended: boolean;
     not_recommended: boolean;
-    comments: CommentItem[];
+    comments: string[];
     views: number;
     likes_count: number;
     dislikes_count: number;
