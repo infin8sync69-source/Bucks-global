@@ -18,36 +18,44 @@ export default function Upload() {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+
+    const applyFile = (selectedFile: File) => {
+        if (selectedFile.size > MAX_FILE_SIZE) {
+            setError('File is too large. Maximum size is 50 MB.');
+            return;
+        }
+        // Revoke any existing object URL before creating a new one
+        if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+        }
+        setFile(selectedFile);
+        setError('');
+        if (selectedFile.type.startsWith('image/') || selectedFile.type.startsWith('video/')) {
+            setPreviewUrl(URL.createObjectURL(selectedFile));
+        } else {
+            setPreviewUrl(null);
+        }
+        setStep(2);
+    };
+
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            const selectedFile = e.target.files[0];
-            setFile(selectedFile);
-            setError('');
-
-            // Create preview
-            if (selectedFile.type.startsWith('image/') || selectedFile.type.startsWith('video/')) {
-                setPreviewUrl(URL.createObjectURL(selectedFile));
-                setStep(2); // Auto-advance to next step
-            } else {
-                setPreviewUrl(null);
-                setStep(2);
-            }
+            applyFile(e.target.files[0]);
         }
     };
 
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            const selectedFile = e.dataTransfer.files[0];
-            setFile(selectedFile);
-            if (selectedFile.type.startsWith('image/') || selectedFile.type.startsWith('video/')) {
-                setPreviewUrl(URL.createObjectURL(selectedFile));
-                setStep(2);
-            }
+            applyFile(e.dataTransfer.files[0]);
         }
     };
 
     const clearFile = () => {
+        if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+        }
         setFile(null);
         setPreviewUrl(null);
         setError('');

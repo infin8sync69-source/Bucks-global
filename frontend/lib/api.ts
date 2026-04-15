@@ -22,10 +22,22 @@ export const getApiBaseUrl = () => {
 // API Client configuration
 export const api = axios.create({
     baseURL: getApiBaseUrl(),
+    timeout: 10000,
     headers: {
         'Content-Type': 'application/json',
     },
 });
+
+// Global response error interceptor — normalize network/timeout errors
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+            error.message = 'Request timed out. Check your connection.';
+        }
+        return Promise.reject(error);
+    },
+);
 
 // Helper to compute HMAC-SHA256 signature
 const signRequest = async (

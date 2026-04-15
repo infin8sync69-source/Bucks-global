@@ -129,6 +129,9 @@ def init_db():
         """)
         c.execute("CREATE INDEX IF NOT EXISTS idx_posts_name ON posts(name);")
         c.execute("CREATE INDEX IF NOT EXISTS idx_posts_description ON posts(description);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_posts_peer_id ON posts(peer_id);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_posts_timestamp ON posts(timestamp);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_posts_peer_ts ON posts(peer_id, timestamp);")
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -155,6 +158,9 @@ def init_db():
                 FOREIGN KEY(post_cid) REFERENCES posts(id)
             );
         """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_interactions_post ON interactions(post_cid);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_interactions_user ON interactions(user_peer_id);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_interactions_user_post ON interactions(user_peer_id, post_cid);")
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS comments (
@@ -167,6 +173,7 @@ def init_db():
                 FOREIGN KEY(post_cid) REFERENCES posts(id)
             );
         """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_cid);")
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS messages (
@@ -181,6 +188,9 @@ def init_db():
                 mime_type TEXT
             );
         """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_peer_id);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_peer_id);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(sender_peer_id, receiver_peer_id, timestamp);")
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS guardians (
@@ -221,6 +231,8 @@ def init_db():
                 PRIMARY KEY (user_peer_id, following_peer_id)
             );
         """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_following_user ON following(user_peer_id);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_following_target ON following(following_peer_id);")
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS notifications (
@@ -285,6 +297,9 @@ def init_db():
         """)
         c.execute("CREATE INDEX IF NOT EXISTS idx_posts_name ON posts(name);")
         c.execute("CREATE INDEX IF NOT EXISTS idx_posts_description ON posts(description);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_posts_peer_id ON posts(peer_id);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_posts_timestamp ON posts(timestamp);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_posts_peer_ts ON posts(peer_id, timestamp);")
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -310,6 +325,9 @@ def init_db():
                 timestamp TEXT
             );
         """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_interactions_post ON interactions(post_cid);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_interactions_user ON interactions(user_peer_id);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_interactions_user_post ON interactions(user_peer_id, post_cid);")
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS comments (
@@ -321,6 +339,7 @@ def init_db():
                 timestamp TEXT
             );
         """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_cid);")
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS messages (
@@ -335,6 +354,9 @@ def init_db():
                 mime_type TEXT
             );
         """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_peer_id);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_peer_id);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(sender_peer_id, receiver_peer_id, timestamp);")
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS guardians (
@@ -375,6 +397,8 @@ def init_db():
                 PRIMARY KEY (user_peer_id, following_peer_id)
             );
         """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_following_user ON following(user_peer_id);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_following_target ON following(following_peer_id);")
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS notifications (

@@ -28,58 +28,72 @@ const EngagementBar = ({
     const [dislikesCount, setDislikesCount] = useState(dislikes_count);
 
     const handleLike = async () => {
+        // Snapshot current state for full revert on error
+        const prevRecommended = recommended;
+        const prevNotRecommended = notRecommended;
+        const prevLikesCount = likesCount;
+        const prevDislikesCount = dislikesCount;
+
         // Optimistic update
         const newRecommended = !recommended;
         setRecommended(newRecommended);
         setLikesCount(prev => newRecommended ? prev + 1 : prev - 1);
 
-        if (newRecommended && notRecommended) {
+        const clearedDislike = newRecommended && notRecommended;
+        if (clearedDislike) {
             setNotRecommended(false);
             setDislikesCount(prev => prev - 1);
         }
 
         try {
             await toggleLike(cid);
-
-            // Notify parent
             onInteractionUpdate?.({
                 recommended: newRecommended,
-                not_recommended: newRecommended ? false : notRecommended,
-                likes_count: newRecommended ? likesCount + 1 : likesCount - 1,
-                dislikes_count: newRecommended && notRecommended ? dislikesCount - 1 : dislikesCount
+                not_recommended: clearedDislike ? false : notRecommended,
+                likes_count: newRecommended ? prevLikesCount + 1 : prevLikesCount - 1,
+                dislikes_count: clearedDislike ? prevDislikesCount - 1 : prevDislikesCount,
             });
         } catch (error) {
-            // Revert on error
+            // Full revert — restore all affected state
             console.error('Failed to like', error);
-            setRecommended(!newRecommended);
-            setLikesCount(prev => !newRecommended ? prev + 1 : prev - 1);
+            setRecommended(prevRecommended);
+            setNotRecommended(prevNotRecommended);
+            setLikesCount(prevLikesCount);
+            setDislikesCount(prevDislikesCount);
         }
     };
 
     const handleDislike = async () => {
+        // Snapshot current state for full revert on error
+        const prevRecommended = recommended;
+        const prevNotRecommended = notRecommended;
+        const prevLikesCount = likesCount;
+        const prevDislikesCount = dislikesCount;
+
         const newNotRecommended = !notRecommended;
         setNotRecommended(newNotRecommended);
         setDislikesCount(prev => newNotRecommended ? prev + 1 : prev - 1);
 
-        if (newNotRecommended && recommended) {
+        const clearedLike = newNotRecommended && recommended;
+        if (clearedLike) {
             setRecommended(false);
             setLikesCount(prev => prev - 1);
         }
 
         try {
             await toggleDislike(cid);
-
-            // Notify parent
             onInteractionUpdate?.({
-                recommended: newNotRecommended ? false : recommended,
+                recommended: clearedLike ? false : recommended,
                 not_recommended: newNotRecommended,
-                likes_count: newNotRecommended && recommended ? likesCount - 1 : likesCount,
-                dislikes_count: newNotRecommended ? dislikesCount + 1 : dislikesCount - 1
+                likes_count: clearedLike ? prevLikesCount - 1 : prevLikesCount,
+                dislikes_count: newNotRecommended ? prevDislikesCount + 1 : prevDislikesCount - 1,
             });
         } catch (error) {
             console.error('Failed to dislike', error);
-            setNotRecommended(!newNotRecommended);
-            setDislikesCount(prev => !newNotRecommended ? prev + 1 : prev - 1);
+            setRecommended(prevRecommended);
+            setNotRecommended(prevNotRecommended);
+            setLikesCount(prevLikesCount);
+            setDislikesCount(prevDislikesCount);
         }
     };
 

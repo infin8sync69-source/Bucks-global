@@ -479,27 +479,32 @@ async def generate_identity():
         raise HTTPException(status_code=500, detail="Failed to generate identity")
 
 @app.get("/api/library")
-async def get_library(request: Request):
-    """Get all posts from library (Global + Recommended)"""
+async def get_library(request: Request, limit: int = 50, offset: int = 0):
+    """Get posts from library with pagination (limit/offset)."""
+    limit = min(max(limit, 1), 200)  # clamp: 1–200
+    offset = max(offset, 0)
+
     did = get_current_did(request)
-    my_peer_id = did # Use DID as my_peer_id
+    my_peer_id = did
     conn = get_db_connection()
-    
-    # Fetch all posts from DB
-    posts = conn.execute("SELECT * FROM posts ORDER BY timestamp DESC").fetchall()
-    
+
+    posts = conn.execute(
+        "SELECT * FROM posts ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+        (limit, offset),
+    ).fetchall()
+    total = conn.execute("SELECT COUNT(*) FROM posts").fetchone()
+    conn.close()
+
+    total_count = total[0] if total else 0
     library = []
     for r in posts:
         p = dict(r)
-        # Ensure compatibility
         p["cid"] = p["id"]
-        # If peer_id missing, assume me
         if not p.get("peer_id"):
             p["peer_id"] = my_peer_id
         library.append(p)
-    
-    conn.close()
-    return {"library": library, "count": len(library)}
+
+    return {"library": library, "count": len(library), "total": total_count, "offset": offset}
 
 @app.get("/api/profile/{peer_id}")
 async def get_user_profile(peer_id: str, request: Request):
@@ -711,11 +716,12 @@ async def upload_file(
     if len(description) > 5000:
         raise HTTPException(status_code=400, detail="Description too long (max 5000 chars)")
         
+    temp_path = None
     try:
         # Save uploaded file temporarily
         temp_dir = tempfile.gettempdir()
         safe_filename = secure_filename(file.filename)
-        temp_path = os.path.join(temp_dir, f"temp_{safe_filename}")
+        temp_path = os.path.join(temp_dir, f"temp_{uuid.uuid4().hex}_{safe_filename}")
         with open(temp_path, "wb") as f:
             content = await file.read()
             f.write(content)
@@ -837,10 +843,6 @@ async def upload_file(
                 "timestamp": datetime.now().isoformat()
             }))
         
-        # Cleanup
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        
         return {
             "success": True,
             "cid": cid,
@@ -848,10 +850,17 @@ async def upload_file(
             "filename": safe_filename,
             "upload_type": upload_type
         }
-    
+
     except Exception as e:
         print(f"Upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Always clean up temp file regardless of success or failure
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
 
 class RegisterContentReq(BaseModel):
     cid: str
