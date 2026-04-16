@@ -148,12 +148,17 @@ def init_db():
                 uuid7 TEXT
             );
         """)
+        # ── Migrations MUST run before indexes that reference new columns ──────
+        # (CREATE TABLE IF NOT EXISTS is a no-op on existing tables, so columns
+        #  added after initial deploy need ALTER TABLE.)
+        for col, coltype in [("secret_key", "TEXT"), ("dag_root", "TEXT"), ("uuid7", "TEXT")]:
+            try:
+                c.execute(f"ALTER TABLE users ADD COLUMN {col} {coltype}")
+            except Exception:
+                pass  # column already exists — fine
+
+        # Now safe to create indexes on columns guaranteed to exist
         c.execute("CREATE INDEX IF NOT EXISTS idx_users_uuid7 ON users(uuid7);")
-        # Add uuid7 column to existing DBs (migration)
-        try:
-            c.execute("ALTER TABLE users ADD COLUMN uuid7 TEXT")
-        except Exception:
-            pass
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS connections (
@@ -276,7 +281,7 @@ def init_db():
             );
         """)
 
-        # Lightweight SQLite migrations for older DBs
+        # Lightweight SQLite migrations for older DBs (messages + following)
         for col, coltype in [("filename", "TEXT"), ("mime_type", "TEXT")]:
             try:
                 c.execute(f"ALTER TABLE messages ADD COLUMN {col} {coltype}")
@@ -287,11 +292,7 @@ def init_db():
                 c.execute(f"ALTER TABLE following ADD COLUMN {col} TEXT")
             except Exception:
                 pass
-        for col in ["secret_key", "dag_root"]:
-            try:
-                c.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
-            except Exception:
-                pass
+        # users column migrations already handled above (before CREATE INDEX)
     else:
         # Postgres/Supabase schema (kept close to SQLite types for compatibility)
         c.execute("""
