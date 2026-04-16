@@ -1,38 +1,26 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     FaFingerprint, FaArrowRight, FaFileImport, FaDownload,
-    FaCircleCheck, FaArrowLeft, FaCopy, FaCheck
+    FaCircleCheck, FaArrowLeft, FaCopy, FaCheck, FaCamera,
 } from 'react-icons/fa6';
 import { G, Iris, Specular, PurpleButton } from '@/components/ui/Glass';
 import { saveIdentity } from '@/lib/identity';
 import { shortUUID } from '@/lib/uuid7';
+import { compressAvatar } from '@/lib/imageUtils';
 import { useToast } from '@/components/Toast';
 import api from '@/lib/api';
 
-// Avatar options — emoji + background colour pairs
-const AVATARS = [
-    { emoji: '🦊', bg: '#FFE4CC' }, { emoji: '🐺', bg: '#E8E8F0' },
-    { emoji: '🦁', bg: '#FFF3CC' }, { emoji: '🐯', bg: '#FFE8CC' },
-    { emoji: '🦋', bg: '#F0E8FF' }, { emoji: '🌙', bg: '#E8F0FF' },
-    { emoji: '⚡', bg: '#FFF8CC' }, { emoji: '🔮', bg: '#EDE0FF' },
-    { emoji: '🌸', bg: '#FFE8F0' }, { emoji: '🎭', bg: '#E8F8FF' },
-    { emoji: '🚀', bg: '#E0EEFF' }, { emoji: '💎', bg: '#E0F8FF' },
-];
-
 type Step = 'choose' | 'generated' | 'profile';
 
-interface GeneratedIdentity {
-    did: string;
-    uuid7: string;
-    secret: string;
-}
+interface GeneratedIdentity { did: string; uuid7: string; secret: string; }
 
 export default function LoginPage() {
     const router = useRouter();
     const { showToast } = useToast();
+    const photoInputRef = useRef<HTMLInputElement>(null);
 
     const [step, setStep] = useState<Step>('choose');
     const [identity, setIdentity] = useState<GeneratedIdentity | null>(null);
@@ -40,17 +28,18 @@ export default function LoginPage() {
     const [didCopied, setDidCopied] = useState(false);
     const [uuidCopied, setUuidCopied] = useState(false);
 
-    // Profile setup state
+    // Profile setup
     const [username, setUsername] = useState('');
     const [bio, setBio] = useState('');
-    const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0]);
+    const [photoDataUrl, setPhotoDataUrl] = useState<string>('');
+    const [photoLoading, setPhotoLoading] = useState(false);
 
-    // ── Step 1 → Step 2: generate DID + UUID7 ────────────────────────────────
+    // ── Generate DID + UUID7 ──────────────────────────────────────────────────
     const handleCreate = async () => {
         setIsBusy(true);
         try {
             const res = await fetch('/api/auth/generate-identity', { method: 'POST' });
-            if (!res.ok) throw new Error('Generation failed');
+            if (!res.ok) throw new Error('Failed');
             const data: GeneratedIdentity = await res.json();
             setIdentity(data);
             setStep('generated');
@@ -61,7 +50,6 @@ export default function LoginPage() {
         }
     };
 
-    // Download the key file
     const handleDownload = () => {
         if (!identity) return;
         const blob = new Blob(
@@ -76,7 +64,23 @@ export default function LoginPage() {
         URL.revokeObjectURL(url);
     };
 
-    // ── Step 3: save profile + enter app ─────────────────────────────────────
+    // ── Photo selection ───────────────────────────────────────────────────────
+    const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setPhotoLoading(true);
+        try {
+            const dataUrl = await compressAvatar(file, 300, 0.85);
+            setPhotoDataUrl(dataUrl);
+        } catch {
+            showToast('Could not process image. Try another file.', 'error');
+        } finally {
+            setPhotoLoading(false);
+            e.target.value = '';
+        }
+    };
+
+    // ── Enter app ─────────────────────────────────────────────────────────────
     const handleEnter = async () => {
         if (!identity || !username.trim()) {
             showToast('Please enter a username.', 'error');
@@ -89,22 +93,20 @@ export default function LoginPage() {
                 uuid7: identity.uuid7,
                 secret: identity.secret,
                 username: username.trim(),
-                avatar: selectedAvatar.emoji,
+                avatar: photoDataUrl,
                 bio: bio.trim(),
                 createdAt: new Date().toISOString(),
             };
-
-            // Persist locally first — always works
             saveIdentity(profile);
 
-            // Register with backend (fire-and-forget — works offline too)
+            // Register with backend (fire-and-forget)
             api.post('/users', {
                 did: profile.did,
                 uuid7: profile.uuid7,
                 username: profile.username,
                 avatar: profile.avatar,
                 bio: profile.bio,
-            }).catch(() => { /* backend offline is fine */ });
+            }).catch(() => { });
 
             router.push('/profile');
         } finally {
@@ -112,7 +114,7 @@ export default function LoginPage() {
         }
     };
 
-    // ── Import existing identity ──────────────────────────────────────────────
+    // ── Import existing ───────────────────────────────────────────────────────
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -120,29 +122,23 @@ export default function LoginPage() {
         reader.onload = (ev) => {
             try {
                 const parsed = JSON.parse(ev.target?.result as string);
-                if (!parsed.did || !parsed.secret) {
-                    showToast('Invalid identity file.', 'error');
-                    return;
-                }
-                // Restore — if uuid7 missing generate one client-side
-                const uuid7 = parsed.uuid7 || ((): string => {
-                    const { generateUUID7 } = require('@/lib/uuid7');
-                    return generateUUID7();
+                if (!parsed.did || !parsed.secret) { showToast('Invalid identity file.', 'error'); return; }
+                const uuid7 = parsed.uuid7 || (() => {
+                    const ms = Date.now();
+                    const tsHex = ms.toString(16).padStart(12, '0');
+                    return `${tsHex.slice(0, 8)}-${tsHex.slice(8, 12)}-7000-8000-000000000000`;
                 })();
                 saveIdentity({
-                    did: parsed.did,
-                    uuid7,
+                    did: parsed.did, uuid7,
                     secret: parsed.secret,
                     username: parsed.username || `User_${shortUUID(uuid7)}`,
-                    avatar: parsed.avatar || '🦊',
+                    avatar: parsed.avatar || '',
                     bio: parsed.bio || '',
                     createdAt: parsed.createdAt || new Date().toISOString(),
                 });
                 showToast('Identity restored!', 'success');
                 router.push('/profile');
-            } catch {
-                showToast('Could not read identity file.', 'error');
-            }
+            } catch { showToast('Could not read file.', 'error'); }
         };
         reader.readAsText(file);
     };
@@ -153,7 +149,7 @@ export default function LoginPage() {
         else { setUuidCopied(true); setTimeout(() => setUuidCopied(false), 2000); }
     };
 
-    // ── Render ────────────────────────────────────────────────────────────────
+    // ── UI ────────────────────────────────────────────────────────────────────
     return (
         <div className="min-h-screen flex flex-col items-center justify-center p-6">
             <div
@@ -163,7 +159,7 @@ export default function LoginPage() {
                 <Iris />
                 <Specular />
 
-                {/* ── STEP 1: CHOOSE ── */}
+                {/* STEP 1 — CHOOSE */}
                 {step === 'choose' && (
                     <div className="space-y-6">
                         <div className="text-center">
@@ -174,14 +170,9 @@ export default function LoginPage() {
                             <p className="text-sm text-gray-500 mt-1">Decentralised identity · No passwords</p>
                         </div>
 
-                        <button
-                            onClick={handleCreate}
-                            disabled={isBusy}
-                            className="w-full p-4 rounded-2xl flex items-center gap-4 text-left group transition-all hover:bg-primary/5 border border-gray-100 hover:border-primary/30"
-                        >
-                            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform text-xl">
-                                🔑
-                            </div>
+                        <button onClick={handleCreate} disabled={isBusy}
+                            className="w-full p-4 rounded-2xl flex items-center gap-4 text-left group transition-all hover:bg-primary/5 border border-gray-100 hover:border-primary/30">
+                            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform text-xl">🔑</div>
                             <div className="flex-1">
                                 <p className="font-bold text-gray-900">Create New Identity</p>
                                 <p className="text-xs text-gray-500">Generate your DID + unique UUID</p>
@@ -193,9 +184,7 @@ export default function LoginPage() {
                         </button>
 
                         <label className="w-full p-4 rounded-2xl flex items-center gap-4 text-left group transition-all hover:bg-purple-50 border border-gray-100 hover:border-purple-200 cursor-pointer">
-                            <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center text-purple-500 group-hover:scale-110 transition-transform text-xl">
-                                <FaFileImport />
-                            </div>
+                            <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center text-purple-500 group-hover:scale-110 transition-transform text-xl"><FaFileImport /></div>
                             <div className="flex-1">
                                 <p className="font-bold text-gray-900">Import Identity</p>
                                 <p className="text-xs text-gray-500">Restore from your identity.json file</p>
@@ -206,117 +195,90 @@ export default function LoginPage() {
                     </div>
                 )}
 
-                {/* ── STEP 2: GENERATED ── */}
+                {/* STEP 2 — GENERATED */}
                 {step === 'generated' && identity && (
                     <div className="space-y-5">
                         <button onClick={() => setStep('choose')} className="flex items-center gap-2 text-sm text-gray-500 hover:text-primary transition-colors">
                             <FaArrowLeft className="text-xs" /> Back
                         </button>
-
                         <div className="flex items-center gap-3 p-4 rounded-2xl bg-green-50 border border-green-100">
                             <FaCircleCheck className="text-2xl text-green-500 shrink-0" />
                             <div>
                                 <p className="font-bold text-green-700">Identity Created!</p>
-                                <p className="text-xs text-green-600">Save your key file — it cannot be recovered.</p>
+                                <p className="text-xs text-green-600">Save your key file — it can't be recovered if lost.</p>
                             </div>
                         </div>
 
-                        {/* UUID7 */}
                         <div style={{ ...G.medium, borderRadius: 16, padding: 16 }}>
                             <div className="flex items-center justify-between mb-1">
                                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Your UUID</p>
-                                <button
-                                    onClick={() => copyText(identity.uuid7, 'uuid')}
-                                    className="text-xs text-primary flex items-center gap-1"
-                                >
+                                <button onClick={() => copyText(identity.uuid7, 'uuid')} className="text-xs text-primary flex items-center gap-1">
                                     {uuidCopied ? <><FaCheck className="text-green-500" /> Copied</> : <><FaCopy /> Copy</>}
                                 </button>
                             </div>
                             <p className="font-mono text-sm font-bold text-gray-800 break-all">{identity.uuid7}</p>
                         </div>
 
-                        {/* DID */}
                         <div style={{ ...G.light, borderRadius: 16, padding: 16 }}>
                             <div className="flex items-center justify-between mb-1">
                                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">DID (cryptographic key)</p>
-                                <button
-                                    onClick={() => copyText(identity.did, 'did')}
-                                    className="text-xs text-primary flex items-center gap-1"
-                                >
+                                <button onClick={() => copyText(identity.did, 'did')} className="text-xs text-primary flex items-center gap-1">
                                     {didCopied ? <><FaCheck className="text-green-500" /> Copied</> : <><FaCopy /> Copy</>}
                                 </button>
                             </div>
                             <p className="font-mono text-xs text-gray-600 break-all leading-relaxed">{identity.did}</p>
                         </div>
 
-                        <button
-                            onClick={handleDownload}
-                            className="w-full py-3 rounded-xl border-2 border-primary/30 text-primary font-semibold flex items-center justify-center gap-2 hover:bg-primary hover:text-white hover:border-primary transition-all"
-                        >
+                        <button onClick={handleDownload}
+                            className="w-full py-3 rounded-xl border-2 border-primary/30 text-primary font-semibold flex items-center justify-center gap-2 hover:bg-primary hover:text-white hover:border-primary transition-all">
                             <FaDownload /> Download Key File
                         </button>
-
-                        <PurpleButton
-                            onClick={() => setStep('profile')}
-                            style={{ width: '100%', padding: '14px', borderRadius: 12, fontSize: 15 }}
-                        >
+                        <PurpleButton onClick={() => setStep('profile')} style={{ width: '100%', padding: '14px', borderRadius: 12, fontSize: 15 }}>
                             Set Up Profile →
                         </PurpleButton>
                     </div>
                 )}
 
-                {/* ── STEP 3: PROFILE SETUP ── */}
+                {/* STEP 3 — PROFILE SETUP */}
                 {step === 'profile' && identity && (
                     <div className="space-y-5">
                         <button onClick={() => setStep('generated')} className="flex items-center gap-2 text-sm text-gray-500 hover:text-primary transition-colors">
                             <FaArrowLeft className="text-xs" /> Back
                         </button>
-
                         <div>
-                            <h2 className="text-xl font-bold text-gray-900">Who are you?</h2>
-                            <p className="text-sm text-gray-500 mt-1">Choose an avatar and set your display name.</p>
+                            <h2 className="text-xl font-bold text-gray-900">Set up your profile</h2>
+                            <p className="text-sm text-gray-500 mt-1">Add a photo and tell people who you are.</p>
                         </div>
 
-                        {/* Avatar picker */}
-                        <div>
-                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Pick an avatar</p>
-                            <div className="grid grid-cols-6 gap-2">
-                                {AVATARS.map((av) => (
-                                    <button
-                                        key={av.emoji}
-                                        onClick={() => setSelectedAvatar(av)}
-                                        className="relative w-full aspect-square rounded-xl flex items-center justify-center text-2xl transition-all hover:scale-110 active:scale-95"
-                                        style={{
-                                            background: av.bg,
-                                            boxShadow: selectedAvatar.emoji === av.emoji
-                                                ? '0 0 0 3px #6A00FF, 0 4px 12px rgba(106,0,255,0.25)'
-                                                : 'none',
-                                            transform: selectedAvatar.emoji === av.emoji ? 'scale(1.12)' : undefined,
-                                        }}
-                                    >
-                                        {av.emoji}
-                                        {selectedAvatar.emoji === av.emoji && (
-                                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
-                                                <FaCheck className="text-white text-[8px]" />
-                                            </span>
-                                        )}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Preview */}
-                        <div className="flex items-center gap-3">
-                            <div
-                                className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-md shrink-0"
-                                style={{ background: selectedAvatar.bg }}
+                        {/* Photo upload */}
+                        <div className="flex flex-col items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => photoInputRef.current?.click()}
+                                className="relative w-28 h-28 rounded-full overflow-hidden border-4 border-white shadow-xl hover:opacity-90 transition-opacity group"
+                                style={{ background: photoDataUrl ? 'transparent' : 'linear-gradient(135deg,#ede9fe,#ddd6fe)' }}
                             >
-                                {selectedAvatar.emoji}
-                            </div>
-                            <div>
-                                <p className="font-bold text-gray-900">{username || 'Your name'}</p>
-                                <p className="text-xs text-gray-400 font-mono">{shortUUID(identity.uuid7)}</p>
-                            </div>
+                                {photoDataUrl
+                                    ? <img src={photoDataUrl} alt="avatar" className="w-full h-full object-cover" />
+                                    : <div className="w-full h-full flex flex-col items-center justify-center gap-1">
+                                        {photoLoading
+                                            ? <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                            : <>
+                                                <FaCamera className="text-2xl text-primary/60" />
+                                                <span className="text-[10px] font-semibold text-primary/60">Add Photo</span>
+                                            </>
+                                        }
+                                    </div>
+                                }
+                                {/* Overlay on hover */}
+                                {photoDataUrl && (
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <FaCamera className="text-white text-xl" />
+                                    </div>
+                                )}
+                            </button>
+                            <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                            <p className="text-xs text-gray-400">Tap to upload · will be cropped square</p>
                         </div>
 
                         {/* Username */}
@@ -328,7 +290,7 @@ export default function LoginPage() {
                                 type="text"
                                 value={username}
                                 onChange={e => setUsername(e.target.value)}
-                                placeholder="Enter your display name"
+                                placeholder="Your display name"
                                 maxLength={32}
                                 className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white/70 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                             />
@@ -359,7 +321,6 @@ export default function LoginPage() {
                     </div>
                 )}
             </div>
-
             <p className="mt-6 text-xs text-gray-400">Bucks Global · Decentralised Identity v2</p>
         </div>
     );

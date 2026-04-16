@@ -9,13 +9,20 @@ import { shortUUID } from '@/lib/uuid7';
 import { useToast } from '@/components/Toast';
 import api from '@/lib/api';
 
-const AVATAR_BG: Record<string, string> = {
-    '🦊': '#FFE4CC', '🐺': '#E8E8F0', '🦁': '#FFF3CC', '🐯': '#FFE8CC',
-    '🦋': '#F0E8FF', '🌙': '#E8F0FF', '⚡': '#FFF8CC', '🔮': '#EDE0FF',
-    '🌸': '#FFE8F0', '🎭': '#E8F8FF', '🚀': '#E0EEFF', '💎': '#E0F8FF',
-};
-function avatarBg(emoji: string): string {
-    return AVATAR_BG[emoji] ?? '#F0E8FF';
+function AvatarImg({ src, size = 96 }: { src: string; size?: number }) {
+    if (src) {
+        return (
+            <img src={src} alt="avatar"
+                className="rounded-3xl object-cover shadow-lg"
+                style={{ width: size, height: size }} />
+        );
+    }
+    return (
+        <div className="rounded-3xl flex items-center justify-center shadow-lg"
+            style={{ width: size, height: size, background: 'linear-gradient(135deg,#ede9fe,#ddd6fe)', fontSize: size * 0.4 }}>
+            👤
+        </div>
+    );
 }
 
 interface UserData {
@@ -156,12 +163,7 @@ export default function UserProfilePage() {
                         <Specular />
 
                         <div className="flex items-end gap-4 mb-4">
-                            <div
-                                className="w-24 h-24 rounded-3xl flex items-center justify-center text-5xl shadow-lg shrink-0"
-                                style={{ background: avatarBg(user.avatar) }}
-                            >
-                                {user.avatar}
-                            </div>
+                            <AvatarImg src={user.avatar} size={96} />
                             {!isOwnProfile && (
                                 <div className="ml-auto">
                                     {synced ? (

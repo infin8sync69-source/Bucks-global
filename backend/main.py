@@ -471,19 +471,37 @@ async def create_user(body: CreateUserReq):
 
 
 @app.get("/api/users")
-async def list_users(limit: int = 50, offset: int = 0):
-    """List all registered users."""
+async def list_users(limit: int = 50, offset: int = 0, q: str = ""):
+    """List users, with optional ?q= search by username or uuid7."""
     limit = min(max(limit, 1), 200)
     offset = max(offset, 0)
     conn = get_db_connection()
-    rows = conn.execute(
-        "SELECT peer_id, did, uuid7, username, handle, avatar, bio FROM users LIMIT ? OFFSET ?",
-        (limit, offset),
-    ).fetchall()
-    total = conn.execute("SELECT COUNT(*) FROM users").fetchone()
+
+    if q.strip():
+        wildcard = f"%{q.strip().lower()}%"
+        rows = conn.execute(
+            """
+            SELECT peer_id, did, uuid7, username, handle, avatar, bio
+            FROM users
+            WHERE lower(username) LIKE ? OR uuid7 LIKE ?
+            ORDER BY username
+            LIMIT ? OFFSET ?
+            """,
+            (wildcard, wildcard, limit, offset),
+        ).fetchall()
+        total_row = conn.execute(
+            "SELECT COUNT(*) FROM users WHERE lower(username) LIKE ? OR uuid7 LIKE ?",
+            (wildcard, wildcard),
+        ).fetchone()
+    else:
+        rows = conn.execute(
+            "SELECT peer_id, did, uuid7, username, handle, avatar, bio FROM users LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+        total_row = conn.execute("SELECT COUNT(*) FROM users").fetchone()
+
     conn.close()
-    users = [dict(r) for r in rows]
-    return {"users": users, "total": total[0] if total else 0}
+    return {"users": [dict(r) for r in rows], "total": total_row[0] if total_row else 0}
 
 
 @app.get("/api/users/{uuid7}")

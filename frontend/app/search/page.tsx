@@ -1,183 +1,242 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import SearchInput from '@/components/SearchInput';
-import Avatar from '@/components/Avatar';
-import api, { getIPFSUrl } from '@/lib/api';
-import { FaUser, FaFile, FaFileImage, FaFileVideo, FaFileAudio, FaSpinner, FaUsers, FaLayerGroup } from 'react-icons/fa6';
-import Link from 'next/link';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { FaMagnifyingGlass, FaXmark, FaRotate, FaCheck } from 'react-icons/fa6';
+import { G, Iris, Specular, PurpleButton } from '@/components/ui/Glass';
+import { getIdentity, getConnections, addConnection, isSynced, type Connection } from '@/lib/identity';
+import { shortUUID } from '@/lib/uuid7';
+import { useToast } from '@/components/Toast';
+import api from '@/lib/api';
 
-interface SearchResult {
-    type: 'post' | 'user';
-    cid: string; // peer_id for users, id for posts
-    name: string; // username for users
-    description: string; // bio for users
-    author: string; // handle for users
-    avatar?: string;
-    filename?: string;
-    timestamp?: string;
-    peer_id?: string;
+interface UserResult {
+    uuid7: string;
+    did: string;
+    username: string;
+    avatar: string;
+    bio: string;
 }
 
-const SearchContent = () => {
-    const searchParams = useSearchParams();
+function UserCard({ user, onSync }: { user: UserResult; onSync: (u: UserResult) => void }) {
     const router = useRouter();
-    const initialQuery = searchParams.get('q') || '';
+    const synced = isSynced(user.uuid7);
+    const myIdentity = getIdentity();
+    const isMe = myIdentity?.uuid7 === user.uuid7;
 
-    const [query, setQuery] = useState(initialQuery);
-    const [activeTab, setActiveTab] = useState<'all' | 'posts' | 'people'>('all');
-    const [results, setResults] = useState<SearchResult[]>([]);
+    return (
+        <div
+            style={{ ...G.card, borderRadius: 20, position: 'relative', overflow: 'hidden' }}
+            className="p-4 flex items-center gap-4 cursor-pointer hover:scale-[1.01] transition-transform active:scale-[0.99]"
+            onClick={() => router.push(`/profile/${user.uuid7}`)}
+        >
+            {/* Avatar */}
+            <div className="w-14 h-14 rounded-2xl overflow-hidden shrink-0 shadow-md"
+                style={{ background: 'linear-gradient(135deg,#ede9fe,#ddd6fe)' }}>
+                {user.avatar
+                    ? <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center text-2xl">👤</div>
+                }
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+                <p className="font-bold text-gray-900 truncate">{user.username}</p>
+                {user.bio && <p className="text-xs text-gray-500 truncate mt-0.5">{user.bio}</p>}
+                <p className="text-[10px] text-primary/60 font-mono mt-1">{user.uuid7}</p>
+            </div>
+
+            {/* Action */}
+            {!isMe && (
+                <button
+                    onClick={e => { e.stopPropagation(); onSync(user); }}
+                    className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        synced
+                            ? 'bg-green-50 text-green-600 border border-green-200 hover:bg-red-50 hover:text-red-500 hover:border-red-200'
+                            : 'bg-primary text-white hover:bg-primary/80'
+                    }`}
+                >
+                    {synced ? '✓ Synced' : '+ Sync'}
+                </button>
+            )}
+            {isMe && (
+                <span className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 text-gray-400">You</span>
+            )}
+        </div>
+    );
+}
+
+export default function SearchPage() {
+    const { showToast } = useToast();
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    const [query, setQuery] = useState('');
+    const [results, setResults] = useState<UserResult[]>([]);
     const [loading, setLoading] = useState(false);
-    const [hasSearched, setHasSearched] = useState(false);
+    const [searched, setSearched] = useState(false);
+    const [, forceUpdate] = useState(0); // re-render after sync
 
+    // Auto-focus on mount
     useEffect(() => {
-        if (initialQuery) {
-            handleSearch(initialQuery);
-        }
-    }, [initialQuery]);
+        inputRef.current?.focus();
+    }, []);
 
-    const handleSearch = async (searchQuery: string) => {
-        if (searchQuery !== query) {
-            setQuery(searchQuery);
-            router.replace(`/search?q=${encodeURIComponent(searchQuery)}`);
-        }
-
-        if (!searchQuery.trim()) {
+    // Debounced search
+    useEffect(() => {
+        if (!query.trim()) {
             setResults([]);
-            setHasSearched(false);
+            setSearched(false);
             return;
         }
 
+        const timer = setTimeout(() => performSearch(query.trim()), 350);
+        return () => clearTimeout(timer);
+    }, [query]);
+
+    const performSearch = useCallback(async (q: string) => {
         setLoading(true);
-        setHasSearched(true);
+        setSearched(true);
+
+        const localResults: UserResult[] = [];
+
+        // 1. Check own identity
+        const me = getIdentity();
+        if (me && (me.username.toLowerCase().includes(q.toLowerCase()) || me.uuid7.includes(q))) {
+            localResults.push({ uuid7: me.uuid7, did: me.did, username: me.username, avatar: me.avatar, bio: me.bio });
+        }
+
+        // 2. Search local connections
+        const conns = getConnections();
+        conns.forEach((c: Connection) => {
+            if (c.username.toLowerCase().includes(q.toLowerCase()) || c.uuid7.includes(q)) {
+                if (!localResults.find(r => r.uuid7 === c.uuid7)) {
+                    localResults.push({ uuid7: c.uuid7, did: c.did, username: c.username, avatar: c.avatar, bio: c.bio });
+                }
+            }
+        });
+
+        setResults(localResults);
+
+        // 3. Fetch from backend
         try {
-            const response = await api.post('/search', { query: searchQuery });
-            const data = response.data;
-            setResults(data.results || []);
-        } catch (error) {
-            console.error("Search failed", error);
+            const res = await api.get<{ users: UserResult[] }>(`/users?q=${encodeURIComponent(q)}&limit=30`);
+            const remote = res.data.users ?? [];
+            // Merge: remote takes precedence, deduplicate by uuid7
+            const merged = [...localResults];
+            remote.forEach(r => {
+                if (!merged.find(m => m.uuid7 === r.uuid7)) merged.push(r);
+            });
+            setResults(merged);
+        } catch {
+            // Backend offline — show local results only
         } finally {
             setLoading(false);
         }
+    }, []);
+
+    const handleSync = (user: UserResult) => {
+        const me = getIdentity();
+        if (isSynced(user.uuid7)) return;
+
+        const conn: Connection = {
+            uuid7: user.uuid7, did: user.did,
+            username: user.username, avatar: user.avatar, bio: user.bio,
+            syncedAt: new Date().toISOString(),
+        };
+        addConnection(conn);
+        showToast(`Synced with ${user.username}! 🔗`, 'success');
+
+        if (me) {
+            api.post(`/users/${user.uuid7}/sync`, { from_uuid7: me.uuid7 }).catch(() => { });
+        }
+
+        forceUpdate(n => n + 1);
     };
 
-    const filterResults = () => {
-        if (activeTab === 'all') return results;
-        return results.filter(r => r.type === (activeTab === 'people' ? 'user' : 'post'));
+    const clearSearch = () => {
+        setQuery('');
+        setResults([]);
+        setSearched(false);
+        inputRef.current?.focus();
     };
-
-    const getFileIcon = (filename: string) => {
-        if (!filename) return <FaFile />;
-        const ext = filename.split('.').pop()?.toLowerCase();
-        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) return <FaFileImage />;
-        if (['mp4', 'webm', 'mov'].includes(ext || '')) return <FaFileVideo />;
-        if (['mp3', 'wav', 'ogg'].includes(ext || '')) return <FaFileAudio />;
-        return <FaFile />;
-    };
-
-    const filtered = filterResults();
 
     return (
-        <div className="bg-white min-h-screen pb-20">
-            <div className="pt-20 px-4 max-w-2xl mx-auto">
-                <div className="mb-6">
-                    <SearchInput
-                        initialQuery={query}
-                        onSearch={handleSearch}
-                        placeholder="Search posts, people, files..."
-                        className="shadow-sm"
+        <div className="min-h-screen p-4 pb-24 max-w-lg mx-auto">
+
+            {/* ── Header ── */}
+            <div className="mb-6 pt-2">
+                <h1 className="text-2xl font-black text-gray-900">Find People</h1>
+                <p className="text-sm text-gray-500 mt-1">Search by name or paste a UUID</p>
+            </div>
+
+            {/* ── Search bar ── */}
+            <div
+                style={{ ...G.heavy, borderRadius: 20, position: 'relative', overflow: 'hidden' }}
+                className="mb-6"
+            >
+                <Iris />
+                <div className="flex items-center gap-3 px-4 py-3">
+                    {loading
+                        ? <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin shrink-0" />
+                        : <FaMagnifyingGlass className="text-primary/60 text-lg shrink-0" />
+                    }
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        placeholder="Name or UUID (e.g. 0195f2a3…)"
+                        className="flex-1 bg-transparent text-gray-900 placeholder-gray-400 text-base focus:outline-none"
+                        spellCheck={false}
+                        autoComplete="off"
                     />
+                    {query && (
+                        <button onClick={clearSearch} className="text-gray-400 hover:text-gray-600 transition-colors shrink-0">
+                            <FaXmark />
+                        </button>
+                    )}
                 </div>
-
-                {/* Tabs */}
-                {hasSearched && (
-                    <div className="flex items-center space-x-1 mb-6 border-b border-gray-100 pb-1 overflow-x-auto scrollbar-hide">
-                        {[
-                            { id: 'all', label: 'All', icon: <FaLayerGroup /> },
-                            { id: 'posts', label: 'Posts', icon: <FaFile /> },
-                            { id: 'people', label: 'People', icon: <FaUsers /> }
-                        ].map((tab) => (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id as any)}
-                                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === tab.id
-                                    ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                                    : 'text-gray-500 hover:bg-gray-100'
-                                    }`}
-                            >
-                                <span className={activeTab === tab.id ? '' : 'opacity-70'}>{tab.icon}</span>
-                                <span>{tab.label}</span>
-                            </button>
-                        ))}
-                    </div>
-                )}
-
-                {/* Results */}
-                {loading ? (
-                    <div className="flex flex-col items-center justify-center py-20 space-y-4">
-                        <FaSpinner className="text-4xl text-primary animate-spin" />
-                        <p className="text-gray-400 font-medium text-sm">Searching the swarm...</p>
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        {hasSearched && filtered.length === 0 && (
-                            <div className="text-center py-20">
-                                <p className="text-gray-400 font-medium">No results found for "{query}"</p>
-                            </div>
-                        )}
-
-                        {filtered.map((result, idx) => (
-                            <div key={`${result.cid}-${idx}`} className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
-                                {result.type === 'user' ? (
-                                    <Link href={`/profile/${result.peer_id}`} className="block bg-white border border-gray-100 rounded-2xl p-4 hover:border-primary/30 hover:shadow-md transition-all group">
-                                        <div className="flex items-center space-x-4">
-                                            <Avatar seed={result.peer_id} src={result.avatar} size="lg" className="group-hover:scale-105 transition-transform" />
-                                            <div>
-                                                <h3 className="font-bold text-gray-900">{result.name || 'Anonymous'}</h3>
-                                                <p className="text-xs text-primary font-medium">@{(result.author || 'unknown').replace(/^@/, '')}</p>
-                                                <p className="text-sm text-gray-500 mt-1 line-clamp-1">{result.description}</p>
-                                            </div>
-                                        </div>
-                                    </Link>
-                                ) : (
-                                    <Link href={`/feed?cid=${result.cid}`} className="block bg-white border border-gray-100 rounded-2xl p-4 hover:border-primary/30 hover:shadow-md transition-all group">
-                                        <div className="flex items-start space-x-4">
-                                            <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400 group-hover:text-primary group-hover:bg-primary/5 transition-colors">
-                                                {getFileIcon(result.filename || '')}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <h3 className="font-bold text-gray-900 truncate pr-4">{result.name}</h3>
-                                                <p className="text-xs text-gray-400 font-medium mb-1">
-                                                    by {result.author} • {new Date(result.timestamp || Date.now()).toLocaleDateString()}
-                                                </p>
-                                                <p className="text-sm text-gray-600 line-clamp-2">{result.description}</p>
-                                                {result.filename && (
-                                                    <div className="mt-2 inline-flex items-center px-2 py-1 bg-gray-50 rounded-lg text-[10px] text-gray-500 font-mono">
-                                                        {result.filename}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </Link>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                )}
             </div>
+
+            {/* ── Results ── */}
+            {!searched && !query && (
+                <div className="text-center py-16 space-y-3">
+                    <div
+                        className="w-20 h-20 rounded-3xl flex items-center justify-center text-4xl mx-auto shadow-lg"
+                        style={G.medium}
+                    >
+                        🔍
+                    </div>
+                    <p className="text-base font-semibold text-gray-700">Search for anyone</p>
+                    <p className="text-sm text-gray-400 max-w-xs mx-auto">
+                        Type a name or paste their full UUID to find their profile and sync with them.
+                    </p>
+                </div>
+            )}
+
+            {searched && results.length === 0 && !loading && (
+                <div
+                    style={{ ...G.medium, borderRadius: 24, position: 'relative', overflow: 'hidden' }}
+                    className="p-10 text-center space-y-3"
+                >
+                    <Iris />
+                    <p className="text-3xl">🌐</p>
+                    <p className="font-semibold text-gray-800">No results for "{query}"</p>
+                    <p className="text-sm text-gray-500">
+                        Try the exact UUID, or ask the person to share their profile link.
+                    </p>
+                </div>
+            )}
+
+            {results.length > 0 && (
+                <div className="space-y-3">
+                    <p className="text-xs font-bold uppercase tracking-widest text-gray-400 px-1">
+                        {results.length} result{results.length !== 1 ? 's' : ''}
+                    </p>
+                    {results.map(user => (
+                        <UserCard key={user.uuid7} user={user} onSync={handleSync} />
+                    ))}
+                </div>
+            )}
         </div>
-    );
-};
-
-export default function SearchPage() {
-    return (
-        <Suspense fallback={
-            <div className="flex items-center justify-center min-h-screen">
-                <FaSpinner className="text-4xl text-primary animate-spin" />
-            </div>
-        }>
-            <SearchContent />
-        </Suspense>
     );
 }
