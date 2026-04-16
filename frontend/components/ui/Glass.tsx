@@ -1,69 +1,77 @@
 import React from "react";
 
-// Glass design tokens — apply as inline styles
+// Dark liquid-glass design tokens — apply as inline styles
 export const G = {
+  // Heaviest panel — primary cards, modals
   heavy: {
-    background: "linear-gradient(145deg, rgba(255,255,255,0.36) 0%, rgba(255,255,255,0.16) 100%)",
-    backdropFilter: "blur(40px) saturate(220%) brightness(1.12)",
-    WebkitBackdropFilter: "blur(40px) saturate(220%) brightness(1.12)",
-    border: "1px solid rgba(255,255,255,0.58)",
-    boxShadow: "0 8px 40px rgba(0,0,0,0.14), inset 0 2px 0 rgba(255,255,255,0.82), inset 0 -1px 0 rgba(255,255,255,0.18)",
+    background: "linear-gradient(145deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%)",
+    backdropFilter: "blur(48px) saturate(140%) brightness(0.80)",
+    WebkitBackdropFilter: "blur(48px) saturate(140%) brightness(0.80)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    boxShadow: "0 8px 48px rgba(0,0,0,0.60), inset 0 1.5px 0 rgba(255,255,255,0.13), inset 0 -1px 0 rgba(0,0,0,0.30)",
   },
+  // Mid-weight — secondary surfaces
   medium: {
-    background: "linear-gradient(145deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.12) 100%)",
-    backdropFilter: "blur(24px) saturate(200%) brightness(1.10)",
-    WebkitBackdropFilter: "blur(24px) saturate(200%) brightness(1.10)",
-    border: "1px solid rgba(255,255,255,0.48)",
-    boxShadow: "0 4px 24px rgba(0,0,0,0.10), inset 0 1.5px 0 rgba(255,255,255,0.78)",
+    background: "linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)",
+    backdropFilter: "blur(32px) saturate(130%) brightness(0.78)",
+    WebkitBackdropFilter: "blur(32px) saturate(130%) brightness(0.78)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    boxShadow: "0 4px 32px rgba(0,0,0,0.50), inset 0 1px 0 rgba(255,255,255,0.10)",
   },
+  // Light — inset panels, info chips
   light: {
-    background: "linear-gradient(145deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.10) 100%)",
-    backdropFilter: "blur(16px) saturate(180%) brightness(1.08)",
-    WebkitBackdropFilter: "blur(16px) saturate(180%) brightness(1.08)",
-    border: "1px solid rgba(255,255,255,0.38)",
-    boxShadow: "0 2px 16px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.68)",
+    background: "linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.015) 100%)",
+    backdropFilter: "blur(20px) saturate(120%) brightness(0.76)",
+    WebkitBackdropFilter: "blur(20px) saturate(120%) brightness(0.76)",
+    border: "1px solid rgba(255,255,255,0.07)",
+    boxShadow: "0 2px 20px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.08)",
   },
+  // Card — content tiles
   card: {
-    background: "linear-gradient(145deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.52) 100%)",
-    backdropFilter: "blur(20px) saturate(180%) brightness(1.08)",
-    WebkitBackdropFilter: "blur(20px) saturate(180%) brightness(1.08)",
-    border: "1px solid rgba(255,255,255,0.75)",
-    boxShadow: "0 4px 24px rgba(100,0,255,0.08), inset 0 1.5px 0 rgba(255,255,255,0.90)",
+    background: "linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.025) 100%)",
+    backdropFilter: "blur(28px) saturate(130%) brightness(0.78)",
+    WebkitBackdropFilter: "blur(28px) saturate(130%) brightness(0.78)",
+    border: "1px solid rgba(255,255,255,0.09)",
+    boxShadow: "0 4px 28px rgba(0,0,0,0.55), inset 0 1.5px 0 rgba(255,255,255,0.11)",
   },
+  // Nav bar — bottom navigation
   nav: {
-    background: "linear-gradient(180deg, rgba(255,255,255,0.48) 0%, rgba(240,230,255,0.35) 100%)",
-    backdropFilter: "blur(48px) saturate(240%) brightness(1.15)",
-    WebkitBackdropFilter: "blur(48px) saturate(240%) brightness(1.15)",
-    border: "1px solid rgba(255,255,255,0.62)",
+    background: "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)",
+    backdropFilter: "blur(56px) saturate(150%) brightness(0.75)",
+    WebkitBackdropFilter: "blur(56px) saturate(150%) brightness(0.75)",
+    border: "1px solid rgba(255,255,255,0.09)",
     borderBottom: "none",
     borderLeft: "none",
     borderRight: "none",
-    boxShadow: "0 -4px 50px rgba(0,0,0,0.08), inset 0 2px 0 rgba(255,255,255,0.92)",
+    boxShadow: "0 -4px 40px rgba(0,0,0,0.50), inset 0 1px 0 rgba(255,255,255,0.12)",
   },
+  // Search / input bar
   search: {
-    background: "linear-gradient(145deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.35) 100%)",
-    backdropFilter: "blur(24px) saturate(180%) brightness(1.15)",
-    WebkitBackdropFilter: "blur(24px) saturate(180%) brightness(1.15)",
-    border: "1px solid rgba(255,255,255,0.68)",
-    boxShadow: "0 4px 24px rgba(0,0,0,0.08), inset 0 1.5px 0 rgba(255,255,255,0.84)",
+    background: "linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.03) 100%)",
+    backdropFilter: "blur(28px) saturate(130%) brightness(0.80)",
+    WebkitBackdropFilter: "blur(28px) saturate(130%) brightness(0.80)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    boxShadow: "0 4px 24px rgba(0,0,0,0.45), inset 0 1.5px 0 rgba(255,255,255,0.09)",
   },
+  // Ghost button
   btn: {
-    background: "linear-gradient(145deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.22) 100%)",
-    backdropFilter: "blur(16px) saturate(180%)",
-    WebkitBackdropFilter: "blur(16px) saturate(180%)",
-    border: "1px solid rgba(255,255,255,0.58)",
-    boxShadow: "inset 0 1.5px 0 rgba(255,255,255,0.74), 0 4px 16px rgba(0,0,0,0.10)",
+    background: "linear-gradient(145deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.04) 100%)",
+    backdropFilter: "blur(16px) saturate(120%)",
+    WebkitBackdropFilter: "blur(16px) saturate(120%)",
+    border: "1px solid rgba(255,255,255,0.14)",
+    boxShadow: "inset 0 1.5px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.35)",
   },
+  // Bottom sheet / drawer
   sheet: {
-    background: "linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(248,244,255,0.92) 100%)",
-    backdropFilter: "blur(40px) saturate(200%) brightness(1.05)",
-    WebkitBackdropFilter: "blur(40px) saturate(200%) brightness(1.05)",
-    border: "1px solid rgba(255,255,255,0.80)",
-    boxShadow: "0 -8px 60px rgba(100,0,255,0.12), inset 0 2px 0 rgba(255,255,255,0.90)",
+    background: "linear-gradient(180deg, rgba(18,18,28,0.94) 0%, rgba(10,10,18,0.97) 100%)",
+    backdropFilter: "blur(48px) saturate(140%) brightness(0.80)",
+    WebkitBackdropFilter: "blur(48px) saturate(140%) brightness(0.80)",
+    border: "1px solid rgba(255,255,255,0.09)",
+    boxShadow: "0 -8px 60px rgba(0,0,0,0.70), inset 0 1px 0 rgba(255,255,255,0.10)",
   },
 } as const;
 
-// Iridescent shimmer overlay — place inside a position:relative container
+// Iridescent shimmer — very subtle on dark glass
 export function Iris({ opacity = 1 }: { opacity?: number }) {
   return (
     <div
@@ -72,7 +80,7 @@ export function Iris({ opacity = 1 }: { opacity?: number }) {
         position: "absolute",
         inset: 0,
         background:
-          "linear-gradient(115deg, rgba(138,43,226,0.08) 0%, rgba(100,180,255,0.09) 25%, rgba(255,255,255,0.13) 50%, rgba(200,120,255,0.07) 75%, rgba(60,210,230,0.07) 100%)",
+          "linear-gradient(115deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.05) 40%, rgba(255,255,255,0.02) 70%, rgba(255,255,255,0.04) 100%)",
         pointerEvents: "none",
         borderRadius: "inherit",
         opacity,
@@ -81,7 +89,7 @@ export function Iris({ opacity = 1 }: { opacity?: number }) {
   );
 }
 
-// Specular highlight — thin prismatic line at top of glass
+// Specular highlight — the bright rim of light on liquid glass
 export function Specular() {
   return (
     <div
@@ -89,11 +97,11 @@ export function Specular() {
       style={{
         position: "absolute",
         top: 0,
-        left: "8%",
-        right: "8%",
-        height: 1.5,
+        left: "6%",
+        right: "6%",
+        height: 1,
         background:
-          "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.95) 30%, rgba(210,180,255,0.82) 55%, rgba(180,230,255,0.82) 75%, rgba(255,255,255,0.92) 90%, transparent 100%)",
+          "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.28) 25%, rgba(255,255,255,0.50) 50%, rgba(255,255,255,0.28) 75%, transparent 100%)",
         pointerEvents: "none",
         borderRadius: "inherit",
       }}
@@ -101,21 +109,21 @@ export function Specular() {
   );
 }
 
-// Glass divider — a subtle frosted horizontal rule
+// Glass divider
 export function GlassDivider() {
   return (
     <div
       style={{
         height: 1,
         background:
-          "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.6) 30%, rgba(200,170,255,0.4) 60%, transparent 100%)",
+          "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 30%, rgba(255,255,255,0.08) 60%, transparent 100%)",
         margin: "0 16px",
       }}
     />
   );
 }
 
-// GlassPanel — generic wrapper that applies G.card + Iris + Specular
+// GlassPanel — generic wrapper
 interface GlassPanelProps {
   children: React.ReactNode;
   style?: React.CSSProperties;
@@ -147,7 +155,7 @@ export function GlassPanel({
   );
 }
 
-// Purple CTA button
+// Primary action button — frosted glass with white text
 interface PurpleButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children: React.ReactNode;
@@ -158,13 +166,15 @@ export function PurpleButton({ children, style, ...props }: PurpleButtonProps) {
     <button
       {...props}
       style={{
-        background: "linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)",
+        background: "linear-gradient(145deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.06) 100%)",
+        backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
         boxShadow:
-          "0 4px 20px rgba(106,0,255,0.45), inset 0 1px 0 rgba(255,255,255,0.35)",
-        color: "#fff",
-        border: "none",
+          "0 4px 20px rgba(0,0,0,0.40), inset 0 1.5px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.20)",
+        color: "rgba(255,255,255,0.92)",
+        border: "1px solid rgba(255,255,255,0.18)",
         borderRadius: 12,
-        fontWeight: 700,
+        fontWeight: 600,
         cursor: "pointer",
         transition: "opacity 0.2s, transform 0.1s",
         ...style,

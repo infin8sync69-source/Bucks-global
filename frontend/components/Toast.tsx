@@ -38,6 +38,12 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
         setToasts(prev => prev.filter(t => t.id !== id));
     };
 
+    const iconColor = (type: ToastType) => {
+        if (type === 'success') return 'rgba(180,255,180,0.85)';
+        if (type === 'error')   return 'rgba(255,160,160,0.85)';
+        return 'rgba(200,200,255,0.85)';
+    };
+
     return (
         <ToastContext.Provider value={{ showToast }}>
             {children}
@@ -45,18 +51,33 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
                 {toasts.map(toast => (
                     <div
                         key={toast.id}
-                        className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl shadow-xl border animate-in slide-in-from-bottom-5 fade-in duration-300 ${toast.type === 'success' ? 'bg-green-50 border-green-100 text-green-800' :
-                            toast.type === 'error' ? 'bg-red-50 border-red-100 text-red-800' :
-                                'bg-blue-50 border-blue-100 text-blue-800'
-                            }`}
+                        className="w-full flex items-center justify-between px-4 py-3 rounded-2xl animate-in slide-in-from-bottom-5 fade-in duration-300"
+                        style={{
+                            background: 'linear-gradient(145deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%)',
+                            backdropFilter: 'blur(32px) saturate(130%)',
+                            WebkitBackdropFilter: 'blur(32px) saturate(130%)',
+                            border: '1px solid rgba(255,255,255,0.10)',
+                            boxShadow: '0 8px 32px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.12)',
+                            color: 'rgba(230,230,240,0.95)',
+                        }}
                     >
                         <div className="flex items-center space-x-3">
-                            {toast.type === 'success' && <FaCircleCheck className="text-green-500" />}
-                            {toast.type === 'error' && <FaCircleExclamation className="text-red-500" />}
-                            {toast.type === 'info' && <FaCircleInfo className="text-blue-500" />}
+                            {toast.type === 'success' && (
+                                <FaCircleCheck style={{ color: iconColor('success'), flexShrink: 0 }} />
+                            )}
+                            {toast.type === 'error' && (
+                                <FaCircleExclamation style={{ color: iconColor('error'), flexShrink: 0 }} />
+                            )}
+                            {toast.type === 'info' && (
+                                <FaCircleInfo style={{ color: iconColor('info'), flexShrink: 0 }} />
+                            )}
                             <span className="text-sm font-medium">{toast.message}</span>
                         </div>
-                        <button onClick={() => removeToast(toast.id)} className="text-current opacity-60 hover:opacity-100 p-1">
+                        <button
+                            onClick={() => removeToast(toast.id)}
+                            className="opacity-40 hover:opacity-80 transition-opacity p-1 ml-3"
+                            style={{ color: 'rgba(255,255,255,0.8)' }}
+                        >
                             <FaXmark className="text-xs" />
                         </button>
                     </div>

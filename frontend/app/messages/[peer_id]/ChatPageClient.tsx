@@ -3,10 +3,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { FaArrowLeft, FaPaperPlane, FaLock } from 'react-icons/fa6';
-import { G, Iris } from '@/components/ui/Glass';
+import { G, Iris, Specular } from '@/components/ui/Glass';
 import { fetchChatHistory, sendChatMessage, type ChatMessage } from '@/lib/api';
 import { getIdentity } from '@/lib/identity';
 import api from '@/lib/api';
+
+const D = {
+    bright: 'rgba(255,255,255,0.88)',
+    mid:    'rgba(255,255,255,0.55)',
+    dim:    'rgba(255,255,255,0.32)',
+};
 
 function AvatarBubble({ src, name, size = 40 }: { src?: string; name: string; size?: number }) {
     if (src) {
@@ -21,12 +27,14 @@ function AvatarBubble({ src, name, size = 40 }: { src?: string; name: string; si
     }
     return (
         <div
-            className="rounded-2xl flex items-center justify-center shrink-0 font-bold text-primary/60"
+            className="rounded-2xl flex items-center justify-center shrink-0 font-bold"
             style={{
                 width: size,
                 height: size,
                 fontSize: size * 0.38,
-                background: 'linear-gradient(135deg,#ede9fe,#ddd6fe)',
+                background: 'rgba(255,255,255,0.07)',
+                border: '1px solid rgba(255,255,255,0.10)',
+                color: D.mid,
             }}
         >
             {name.charAt(0).toUpperCase()}
@@ -57,7 +65,6 @@ export default function ChatPageClient() {
     const [notAllowed, setNotAllowed] = useState(false);
     const [text, setText] = useState('');
     const [sending, setSending] = useState(false);
-    // optimistic message ids
     const [optimisticMsgs, setOptimisticMsgs] = useState<ChatMessage[]>([]);
 
     const bottomRef = useRef<HTMLDivElement>(null);
@@ -68,7 +75,6 @@ export default function ChatPageClient() {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
-    // Load peer info
     useEffect(() => {
         api.get(`/users/${peerUuid7}`)
             .then(res => {
@@ -84,7 +90,7 @@ export default function ChatPageClient() {
         try {
             const history = await fetchChatHistory(peerUuid7);
             setMessages(history);
-            setOptimisticMsgs([]); // real data supersedes
+            setOptimisticMsgs([]);
             setNotAllowed(false);
         } catch (err: any) {
             if (err?.response?.status === 403) {
@@ -97,7 +103,6 @@ export default function ChatPageClient() {
 
     useEffect(() => {
         loadMessages();
-        // Poll every 3 seconds for new messages
         pollRef.current = setInterval(loadMessages, 3000);
         return () => {
             if (pollRef.current) clearInterval(pollRef.current);
@@ -116,7 +121,6 @@ export default function ChatPageClient() {
         setText('');
         setSending(true);
 
-        // Optimistic message
         const optimistic: ChatMessage = {
             sender: myUuid7,
             receiver: peerUuid7,
@@ -128,12 +132,10 @@ export default function ChatPageClient() {
 
         try {
             await sendChatMessage(peerUuid7, trimmed);
-            // Next poll will reconcile
         } catch (err) {
             console.error('Send failed', err);
-            // Remove optimistic on failure
             setOptimisticMsgs(prev => prev.filter(m => m !== optimistic));
-            setText(trimmed); // restore text
+            setText(trimmed);
         } finally {
             setSending(false);
             inputRef.current?.focus();
@@ -145,7 +147,6 @@ export default function ChatPageClient() {
         return null;
     }
 
-    // All visible messages = confirmed + optimistic (de-dupe by timestamp+text)
     const allMessages = [
         ...messages,
         ...optimisticMsgs.filter(
@@ -154,16 +155,18 @@ export default function ChatPageClient() {
     ].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
     return (
-        <div className="flex flex-col h-screen max-w-lg mx-auto" style={{ background: '#f8f6ff' }}>
+        <div className="flex flex-col h-screen max-w-lg mx-auto" style={{ background: '#080810' }}>
 
             {/* ── Header ── */}
             <header
                 className="flex items-center gap-3 px-4 py-3 sticky top-0 z-10"
-                style={{ ...G.nav, borderBottom: '1px solid rgba(255,255,255,0.5)' }}
+                style={{ ...G.nav, borderBottom: '1px solid rgba(255,255,255,0.07)', position: 'relative', overflow: 'hidden' }}
             >
+                <Specular />
                 <button
                     onClick={() => router.back()}
-                    className="p-2 rounded-xl text-primary/70 hover:bg-primary/10 transition-colors shrink-0"
+                    className="p-2 rounded-xl transition-colors shrink-0"
+                    style={{ color: D.mid }}
                 >
                     <FaArrowLeft />
                 </button>
@@ -171,10 +174,10 @@ export default function ChatPageClient() {
                 <AvatarBubble src={peerAvatar} name={peerName || '?'} size={40} />
 
                 <div className="flex-1 min-w-0">
-                    <p className="font-bold text-gray-900 truncate leading-tight">{peerName || '…'}</p>
-                    <div className="flex items-center gap-1 text-[10px] text-primary/60 font-medium">
+                    <p className="font-bold truncate leading-tight" style={{ color: D.bright }}>{peerName || '…'}</p>
+                    <div className="flex items-center gap-1 text-[10px] font-medium" style={{ color: D.dim }}>
                         <FaLock className="text-[8px]" />
-                        <span>Mutual sync · encrypted</span>
+                        <span>Mutual sync</span>
                     </div>
                 </div>
             </header>
@@ -184,7 +187,7 @@ export default function ChatPageClient() {
 
                 {loading && (
                     <div className="flex items-center justify-center py-20">
-                        <div className="w-8 h-8 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                        <div className="w-8 h-8 border-2 border-t-white/30 border-white/08 rounded-full animate-spin" />
                     </div>
                 )}
 
@@ -194,14 +197,15 @@ export default function ChatPageClient() {
                         className="p-10 text-center space-y-3 mt-10"
                     >
                         <Iris />
-                        <div className="text-4xl">🔒</div>
-                        <p className="font-bold text-gray-800">Not mutually synced</p>
-                        <p className="text-sm text-gray-500">
+                        <Specular />
+                        <p className="font-bold" style={{ color: D.bright }}>Not mutually synced</p>
+                        <p className="text-sm" style={{ color: D.dim }}>
                             Both you and this person need to sync each other before you can message.
                         </p>
                         <button
                             onClick={() => router.push(`/profile/${peerUuid7}`)}
-                            className="mt-2 text-sm font-bold text-primary hover:underline"
+                            className="mt-2 text-sm font-bold hover:underline"
+                            style={{ color: D.mid }}
                         >
                             Go to their profile →
                         </button>
@@ -209,9 +213,8 @@ export default function ChatPageClient() {
                 )}
 
                 {!loading && !notAllowed && allMessages.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-20 text-gray-400 space-y-2">
-                        <span className="text-4xl">👋</span>
-                        <p className="text-sm font-medium">Say hello!</p>
+                    <div className="flex flex-col items-center justify-center py-20 space-y-2" style={{ color: D.dim }}>
+                        <p className="text-sm font-medium">Say hello</p>
                     </div>
                 )}
 
@@ -223,26 +226,26 @@ export default function ChatPageClient() {
                     return (
                         <div key={i} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                             <div
-                                className={`max-w-[78%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed shadow-sm ${
-                                    isMine
-                                        ? 'rounded-br-sm text-white'
-                                        : 'rounded-bl-sm bg-white text-gray-800'
-                                } ${isOptimistic ? 'opacity-70' : ''}`}
-                                style={
-                                    isMine
-                                        ? {
-                                            background: 'linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)',
-                                            boxShadow: '0 4px 14px rgba(106,0,255,0.25)',
-                                        }
-                                        : {}
-                                }
+                                className={`max-w-[78%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                                    isMine ? 'rounded-br-sm' : 'rounded-bl-sm'
+                                } ${isOptimistic ? 'opacity-60' : ''}`}
+                                style={isMine ? {
+                                    background: 'linear-gradient(145deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.06) 100%)',
+                                    border: '1px solid rgba(255,255,255,0.16)',
+                                    boxShadow: '0 4px 16px rgba(0,0,0,0.35), inset 0 1.5px 0 rgba(255,255,255,0.18)',
+                                    color: D.bright,
+                                    backdropFilter: 'blur(12px)',
+                                } : {
+                                    background: 'rgba(255,255,255,0.04)',
+                                    border: '1px solid rgba(255,255,255,0.07)',
+                                    boxShadow: '0 2px 10px rgba(0,0,0,0.25)',
+                                    color: D.mid,
+                                }}
                             >
                                 <p>{msg.text}</p>
-                                <p
-                                    className={`text-[9px] mt-1 text-right ${isMine ? 'text-white/60' : 'text-gray-400'}`}
-                                >
+                                <p className="text-[9px] mt-1 text-right" style={{ color: isMine ? 'rgba(255,255,255,0.40)' : D.dim }}>
                                     {formatTime(msg.timestamp)}
-                                    {isOptimistic && ' ·sending'}
+                                    {isOptimistic && ' · sending'}
                                 </p>
                             </div>
                         </div>
@@ -256,8 +259,9 @@ export default function ChatPageClient() {
             {!notAllowed && (
                 <footer
                     className="px-4 py-3 pb-8 md:pb-4"
-                    style={{ ...G.nav, borderTop: '1px solid rgba(255,255,255,0.5)' }}
+                    style={{ ...G.nav, borderTop: '1px solid rgba(255,255,255,0.07)', position: 'relative', overflow: 'hidden' }}
                 >
+                    <Specular />
                     <form onSubmit={handleSend} className="flex items-center gap-2">
                         <input
                             ref={inputRef}
@@ -265,16 +269,24 @@ export default function ChatPageClient() {
                             value={text}
                             onChange={e => setText(e.target.value)}
                             placeholder="Type a message…"
-                            className="flex-1 px-4 py-2.5 rounded-2xl text-sm bg-white/70 border border-white/80 focus:outline-none focus:ring-2 focus:ring-primary/20 placeholder-gray-400"
+                            className="flex-1 px-4 py-2.5 rounded-2xl text-sm focus:outline-none"
+                            style={{
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid rgba(255,255,255,0.09)',
+                                color: D.bright,
+                                caretColor: 'rgba(255,255,255,0.70)',
+                            }}
                             autoComplete="off"
                         />
                         <button
                             type="submit"
                             disabled={!text.trim() || sending}
-                            className="w-10 h-10 rounded-2xl flex items-center justify-center text-white disabled:opacity-40 transition-all shrink-0"
+                            className="w-10 h-10 rounded-2xl flex items-center justify-center transition-all shrink-0 disabled:opacity-30"
                             style={{
-                                background: 'linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)',
-                                boxShadow: '0 4px 14px rgba(106,0,255,0.35)',
+                                background: 'linear-gradient(145deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.07) 100%)',
+                                border: '1px solid rgba(255,255,255,0.20)',
+                                boxShadow: '0 4px 16px rgba(0,0,0,0.35), inset 0 1.5px 0 rgba(255,255,255,0.22)',
+                                color: D.bright,
                             }}
                         >
                             <FaPaperPlane className="text-sm -rotate-12 translate-x-0.5" />

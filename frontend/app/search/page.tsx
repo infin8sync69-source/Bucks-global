@@ -2,13 +2,18 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { FaMagnifyingGlass, FaXmark, FaRotate, FaCheck } from 'react-icons/fa6';
-import { G, Iris, Specular, PurpleButton } from '@/components/ui/Glass';
+import { FaMagnifyingGlass, FaXmark } from 'react-icons/fa6';
+import { G, Iris, Specular } from '@/components/ui/Glass';
 import { getIdentity, getConnections, addConnection, isSynced, type Connection } from '@/lib/identity';
-import { shortUUID } from '@/lib/uuid7';
 import { useToast } from '@/components/Toast';
 import api from '@/lib/api';
 import { pushSyncToBackend } from '@/lib/sync';
+
+const D = {
+    bright: 'rgba(255,255,255,0.88)',
+    mid:    'rgba(255,255,255,0.55)',
+    dim:    'rgba(255,255,255,0.32)',
+};
 
 interface UserResult {
     uuid7: string;
@@ -30,37 +35,54 @@ function UserCard({ user, onSync }: { user: UserResult; onSync: (u: UserResult) 
             className="p-4 flex items-center gap-4 cursor-pointer hover:scale-[1.01] transition-transform active:scale-[0.99]"
             onClick={() => router.push(`/profile/${user.uuid7}`)}
         >
+            <Specular />
+
             {/* Avatar */}
-            <div className="w-14 h-14 rounded-2xl overflow-hidden shrink-0 shadow-md"
-                style={{ background: 'linear-gradient(135deg,#ede9fe,#ddd6fe)' }}>
+            <div
+                className="w-14 h-14 rounded-2xl overflow-hidden shrink-0"
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)' }}
+            >
                 {user.avatar
                     ? <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center text-2xl">👤</div>
+                    : <div className="w-full h-full flex items-center justify-center text-xl font-bold" style={{ color: D.dim }}>
+                        {user.username.charAt(0).toUpperCase()}
+                    </div>
                 }
             </div>
 
             {/* Info */}
             <div className="flex-1 min-w-0">
-                <p className="font-bold text-gray-900 truncate">{user.username}</p>
-                {user.bio && <p className="text-xs text-gray-500 truncate mt-0.5">{user.bio}</p>}
-                <p className="text-[10px] text-primary/60 font-mono mt-1">{user.uuid7}</p>
+                <p className="font-bold truncate" style={{ color: D.bright }}>{user.username}</p>
+                {user.bio && <p className="text-xs truncate mt-0.5" style={{ color: D.dim }}>{user.bio}</p>}
+                <p className="text-[10px] font-mono mt-1" style={{ color: 'rgba(255,255,255,0.22)' }}>{user.uuid7}</p>
             </div>
 
             {/* Action */}
             {!isMe && (
                 <button
                     onClick={e => { e.stopPropagation(); onSync(user); }}
-                    className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                        synced
-                            ? 'bg-green-50 text-green-600 border border-green-200 hover:bg-red-50 hover:text-red-500 hover:border-red-200'
-                            : 'bg-primary text-white hover:bg-primary/80'
-                    }`}
+                    className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+                    style={synced ? {
+                        background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        color: D.mid,
+                    } : {
+                        background: 'linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 100%)',
+                        border: '1px solid rgba(255,255,255,0.16)',
+                        boxShadow: 'inset 0 1.5px 0 rgba(255,255,255,0.18)',
+                        color: D.bright,
+                    }}
                 >
                     {synced ? '✓ Synced' : '+ Sync'}
                 </button>
             )}
             {isMe && (
-                <span className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 text-gray-400">You</span>
+                <span
+                    className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold"
+                    style={{ background: 'rgba(255,255,255,0.04)', color: D.dim }}
+                >
+                    You
+                </span>
             )}
         </div>
     );
@@ -75,21 +97,18 @@ export default function SearchPage() {
     const [loading, setLoading] = useState(false);
     const [searched, setSearched] = useState(false);
     const [backendOk, setBackendOk] = useState(true);
-    const [, forceUpdate] = useState(0); // re-render after sync
+    const [, forceUpdate] = useState(0);
 
-    // Auto-focus on mount
     useEffect(() => {
         inputRef.current?.focus();
     }, []);
 
-    // Debounced search
     useEffect(() => {
         if (!query.trim()) {
             setResults([]);
             setSearched(false);
             return;
         }
-
         const timer = setTimeout(() => performSearch(query.trim()), 350);
         return () => clearTimeout(timer);
     }, [query]);
@@ -100,13 +119,11 @@ export default function SearchPage() {
 
         const localResults: UserResult[] = [];
 
-        // 1. Check own identity
         const me = getIdentity();
         if (me && (me.username.toLowerCase().includes(q.toLowerCase()) || me.uuid7.includes(q))) {
             localResults.push({ uuid7: me.uuid7, did: me.did, username: me.username, avatar: me.avatar, bio: me.bio });
         }
 
-        // 2. Search local connections
         const conns = getConnections();
         conns.forEach((c: Connection) => {
             if (c.username.toLowerCase().includes(q.toLowerCase()) || c.uuid7.includes(q)) {
@@ -118,23 +135,20 @@ export default function SearchPage() {
 
         setResults(localResults);
 
-        // 3. Fetch from backend — also try exact uuid7 lookup for full-UUID paste
         try {
             const res = await api.get<{ users: UserResult[] }>(`/users?q=${encodeURIComponent(q)}&limit=30`);
             const remote = res.data.users ?? [];
             setBackendOk(true);
 
-            // Also try direct lookup by uuid7 (handles exact paste of full UUID)
             let directHit: UserResult | null = null;
             const looksLikeUuid = /^[0-9a-f-]{8,}/i.test(q.trim());
             if (looksLikeUuid && !remote.find(r => r.uuid7 === q.trim())) {
                 try {
                     const direct = await api.get<UserResult>(`/users/${q.trim()}`);
                     directHit = direct.data;
-                } catch { /* not found — ignore */ }
+                } catch { /* not found */ }
             }
 
-            // Merge: remote takes precedence, deduplicate by uuid7
             const merged = [...localResults];
             [...remote, ...(directHit ? [directHit] : [])].forEach(r => {
                 if (r.uuid7 && !merged.find(m => m.uuid7 === r.uuid7)) merged.push(r);
@@ -142,7 +156,6 @@ export default function SearchPage() {
             setResults(merged);
         } catch {
             setBackendOk(false);
-            // Backend offline — local results already set above
         } finally {
             setLoading(false);
         }
@@ -151,20 +164,14 @@ export default function SearchPage() {
     const handleSync = (user: UserResult) => {
         const me = getIdentity();
         if (isSynced(user.uuid7)) return;
-
         const conn: Connection = {
             uuid7: user.uuid7, did: user.did,
             username: user.username, avatar: user.avatar, bio: user.bio,
             syncedAt: new Date().toISOString(),
         };
         addConnection(conn);
-        showToast(`Synced with ${user.username}! 🔗`, 'success');
-
-        // Push to backend with retry so the other device can see it
-        if (me?.uuid7) {
-            pushSyncToBackend(me.uuid7, user.uuid7);
-        }
-
+        showToast(`Synced with ${user.username}`, 'success');
+        if (me?.uuid7) pushSyncToBackend(me.uuid7, user.uuid7);
         forceUpdate(n => n + 1);
     };
 
@@ -178,63 +185,72 @@ export default function SearchPage() {
     return (
         <div className="min-h-screen p-4 pb-24 max-w-lg mx-auto">
 
-            {/* ── Header ── */}
+            {/* Header */}
             <div className="mb-6 pt-2">
-                <h1 className="text-2xl font-black text-gray-900">Find People</h1>
-                <p className="text-sm text-gray-500 mt-1">Search by name or paste a UUID</p>
+                <h1 className="text-2xl font-black" style={{ color: 'rgba(255,255,255,0.88)' }}>Find People</h1>
+                <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.32)' }}>Search by name or paste a UUID</p>
             </div>
 
-            {/* ── Backend offline warning ── */}
+            {/* Backend offline warning */}
             {searched && !backendOk && (
-                <div className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700">
-                    <span className="text-base shrink-0">⚠️</span>
+                <div
+                    className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-xl text-xs"
+                    style={{
+                        background: 'rgba(255,200,80,0.06)',
+                        border: '1px solid rgba(255,200,80,0.15)',
+                        color: 'rgba(255,200,100,0.70)',
+                    }}
+                >
+                    <span className="text-base shrink-0">⚠</span>
                     <span>
-                        <strong>Showing local results only.</strong> The server is unreachable — other users won't appear until the connection is restored. Make sure your device is connected to the internet and the backend is running.
+                        <strong>Showing local results only.</strong> Server unreachable — other users won't appear until the connection is restored.
                     </span>
                 </div>
             )}
 
-            {/* ── Search bar ── */}
+            {/* Search bar */}
             <div
                 style={{ ...G.heavy, borderRadius: 20, position: 'relative', overflow: 'hidden' }}
                 className="mb-6"
             >
                 <Iris />
+                <Specular />
                 <div className="flex items-center gap-3 px-4 py-3">
                     {loading
-                        ? <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin shrink-0" />
-                        : <FaMagnifyingGlass className="text-primary/60 text-lg shrink-0" />
+                        ? <div className="w-5 h-5 border-2 border-white/20 border-t-white/50 rounded-full animate-spin shrink-0" />
+                        : <FaMagnifyingGlass className="text-lg shrink-0" style={{ color: 'rgba(255,255,255,0.35)' }} />
                     }
                     <input
                         ref={inputRef}
                         type="text"
                         value={query}
                         onChange={e => setQuery(e.target.value)}
-                        placeholder="Name or UUID (e.g. 0195f2a3…)"
-                        className="flex-1 bg-transparent text-gray-900 placeholder-gray-400 text-base focus:outline-none"
+                        placeholder="Name or UUID"
+                        className="flex-1 bg-transparent text-base focus:outline-none"
+                        style={{ color: 'rgba(255,255,255,0.85)', caretColor: 'rgba(255,255,255,0.70)' }}
                         spellCheck={false}
                         autoComplete="off"
                     />
                     {query && (
-                        <button onClick={clearSearch} className="text-gray-400 hover:text-gray-600 transition-colors shrink-0">
+                        <button onClick={clearSearch} className="transition-opacity hover:opacity-80 shrink-0" style={{ color: 'rgba(255,255,255,0.35)' }}>
                             <FaXmark />
                         </button>
                     )}
                 </div>
             </div>
 
-            {/* ── Results ── */}
+            {/* Empty state */}
             {!searched && !query && (
                 <div className="text-center py-16 space-y-3">
                     <div
-                        className="w-20 h-20 rounded-3xl flex items-center justify-center text-4xl mx-auto shadow-lg"
-                        style={G.medium}
+                        className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto"
+                        style={{ ...G.medium, fontSize: 32 }}
                     >
-                        🔍
+                        ◈
                     </div>
-                    <p className="text-base font-semibold text-gray-700">Search for anyone</p>
-                    <p className="text-sm text-gray-400 max-w-xs mx-auto">
-                        Type a name or paste their full UUID to find their profile and sync with them.
+                    <p className="text-base font-semibold" style={{ color: D.mid }}>Search for anyone</p>
+                    <p className="text-sm max-w-xs mx-auto" style={{ color: D.dim }}>
+                        Type a name or paste a UUID to find and sync with people.
                     </p>
                 </div>
             )}
@@ -245,9 +261,9 @@ export default function SearchPage() {
                     className="p-10 text-center space-y-3"
                 >
                     <Iris />
-                    <p className="text-3xl">🌐</p>
-                    <p className="font-semibold text-gray-800">No results for "{query}"</p>
-                    <p className="text-sm text-gray-500">
+                    <Specular />
+                    <p className="font-semibold" style={{ color: D.mid }}>No results for "{query}"</p>
+                    <p className="text-sm" style={{ color: D.dim }}>
                         Try the exact UUID, or ask the person to share their profile link.
                     </p>
                 </div>
@@ -255,7 +271,7 @@ export default function SearchPage() {
 
             {results.length > 0 && (
                 <div className="space-y-3">
-                    <p className="text-xs font-bold uppercase tracking-widest text-gray-400 px-1">
+                    <p className="text-xs font-bold uppercase tracking-widest px-1" style={{ color: D.dim }}>
                         {results.length} result{results.length !== 1 ? 's' : ''}
                     </p>
                     {results.map(user => (
