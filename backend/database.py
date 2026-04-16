@@ -144,9 +144,27 @@ def init_db():
                 location TEXT,
                 did TEXT,
                 secret_key TEXT,
-                dag_root TEXT
+                dag_root TEXT,
+                uuid7 TEXT
             );
         """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_users_uuid7 ON users(uuid7);")
+        # Add uuid7 column to existing DBs (migration)
+        try:
+            c.execute("ALTER TABLE users ADD COLUMN uuid7 TEXT")
+        except Exception:
+            pass
+
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS connections (
+                from_uuid7 TEXT,
+                to_uuid7 TEXT,
+                synced_at TEXT,
+                PRIMARY KEY (from_uuid7, to_uuid7)
+            );
+        """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_connections_from ON connections(from_uuid7);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_connections_to ON connections(to_uuid7);")
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS interactions (
@@ -312,9 +330,26 @@ def init_db():
                 location TEXT,
                 did TEXT,
                 secret_key TEXT,
-                dag_root TEXT
+                dag_root TEXT,
+                uuid7 TEXT
             );
         """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_users_uuid7 ON users(uuid7);")
+        try:
+            c.execute("ALTER TABLE users ADD COLUMN uuid7 TEXT")
+        except Exception:
+            pass
+
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS connections (
+                from_uuid7 TEXT,
+                to_uuid7 TEXT,
+                synced_at TEXT,
+                PRIMARY KEY (from_uuid7, to_uuid7)
+            );
+        """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_connections_from ON connections(from_uuid7);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_connections_to ON connections(to_uuid7);")
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS interactions (

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { generateKeyPairSync } from 'crypto';
+import { generateKeyPairSync, randomBytes } from 'crypto';
 
 // Base58-BTC alphabet (Bitcoin variant used by IPFS / multibase)
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -25,8 +25,20 @@ function base58Encode(bytes: Uint8Array): string {
     return result;
 }
 
+/** Server-side UUID7 using Node's crypto.randomBytes for strong randomness. */
+function generateUUID7Server(): string {
+    const ms = Date.now();
+    const tsHex = ms.toString(16).padStart(12, '0');
+    const rnd = randomBytes(8);
+    const randA = ((rnd[0] & 0x0f) * 256 + rnd[1]).toString(16).padStart(3, '0');
+    const variantOctet = (rnd[2] & 0x3f) | 0x80;
+    const part4 = variantOctet.toString(16).padStart(2, '0') + rnd[3].toString(16).padStart(2, '0');
+    const part5 = Array.from(rnd.slice(4)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return `${tsHex.slice(0, 8)}-${tsHex.slice(8, 12)}-7${randA}-${part4}-${part5}`;
+}
+
 /**
- * Generate an Ed25519 DID (did:key:z...) and return it with the hex private key.
+ * Generate an Ed25519 DID (did:key:z...) + UUID7 and return with the hex private key.
  * Runs on the server (Vercel Functions) — no backend dependency needed.
  */
 export async function POST() {
@@ -52,7 +64,10 @@ export async function POST() {
         const did = `did:key:z${encoded}`;
         const secret = privateBytes.toString('hex');
 
-        return NextResponse.json({ did, secret });
+        // Generate UUID v7 (server-side with Node crypto for stronger randomness)
+        const uuid7 = generateUUID7Server();
+
+        return NextResponse.json({ did, secret, uuid7 });
     } catch (err) {
         console.error('[generate-identity]', err);
         return NextResponse.json({ error: 'Failed to generate identity' }, { status: 500 });

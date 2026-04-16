@@ -423,4 +423,57 @@ export const fetchAgentResponse = async (query: string): Promise<string> => {
     }
 };
 
+// ─── Users / Identity ────────────────────────────────────────────────────────
+
+export interface UserRecord {
+    did: string;
+    uuid7: string;
+    username: string;
+    avatar: string;
+    bio: string;
+    peer_id?: string;
+}
+
+export const registerUser = async (user: {
+    did: string;
+    uuid7: string;
+    username: string;
+    avatar: string;
+    bio: string;
+}) => {
+    const response = await api.post<{ success: boolean; uuid7: string }>('/users', user);
+    return response.data;
+};
+
+export const listUsers = async (limit = 50, offset = 0) => {
+    const response = await api.get<{ users: UserRecord[]; total: number }>(
+        `/users?limit=${limit}&offset=${offset}`
+    );
+    return response.data;
+};
+
+export const getUserByUUID = async (uuid7: string) => {
+    const response = await api.get<UserRecord>(`/users/${uuid7}`);
+    return response.data;
+};
+
+export const syncUser = async (targetUuid7: string, fromUuid7: string) => {
+    const response = await api.post<{ success: boolean }>(`/users/${targetUuid7}/sync`, {
+        from_uuid7: fromUuid7,
+    });
+    return response.data;
+};
+
+export const unsyncUser = async (targetUuid7: string) => {
+    const response = await api.delete<{ success: boolean }>(`/users/${targetUuid7}/sync`);
+    return response.data;
+};
+
+export const getUserConnections = async (uuid7: string) => {
+    const response = await api.get<{ connections: UserRecord[]; count: number }>(
+        `/users/${uuid7}/connections`
+    );
+    return response.data;
+};
+
 export default api;

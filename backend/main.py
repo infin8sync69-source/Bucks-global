@@ -433,6 +433,132 @@ async def health():
     """Health-check for Railway / Render / uptime monitors."""
     return {"status": "ok", "ipfs": rpc_client is not None, "p2p": p2p_client is not None}
 
+
+# ==================== User Identity / Profile / Sync ====================
+
+class CreateUserReq(BaseModel):
+    did: str
+    uuid7: str
+    username: str
+    avatar: str = "🦊"
+    bio: str = ""
+
+@app.post("/api/users")
+async def create_user(body: CreateUserReq):
+    """Register or update a user profile by DID + UUID7."""
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO users (peer_id, did, uuid7, username, handle, avatar, bio)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(peer_id) DO UPDATE SET
+                uuid7      = excluded.uuid7,
+                username   = excluded.username,
+                handle     = excluded.handle,
+                avatar     = excluded.avatar,
+                bio        = excluded.bio
+            """,
+            (body.did, body.did, body.uuid7, body.username,
+             f"@{body.username.lower()}", body.avatar, body.bio),
+        )
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        raise HTTPException(status_code=500, detail=str(e))
+    conn.close()
+    return {"success": True, "uuid7": body.uuid7}
+
+
+@app.get("/api/users")
+async def list_users(limit: int = 50, offset: int = 0):
+    """List all registered users."""
+    limit = min(max(limit, 1), 200)
+    offset = max(offset, 0)
+    conn = get_db_connection()
+    rows = conn.execute(
+        "SELECT peer_id, did, uuid7, username, handle, avatar, bio FROM users LIMIT ? OFFSET ?",
+        (limit, offset),
+    ).fetchall()
+    total = conn.execute("SELECT COUNT(*) FROM users").fetchone()
+    conn.close()
+    users = [dict(r) for r in rows]
+    return {"users": users, "total": total[0] if total else 0}
+
+
+@app.get("/api/users/{uuid7}")
+async def get_user_by_uuid7(uuid7: str):
+    """Get a user profile by their UUID7."""
+    conn = get_db_connection()
+    row = conn.execute(
+        "SELECT peer_id, did, uuid7, username, handle, avatar, bio FROM users WHERE uuid7 = ?",
+        (uuid7,),
+    ).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    return dict(row)
+
+
+@app.post("/api/users/{uuid7}/sync")
+async def sync_users(uuid7: str, request: Request):
+    """Record a sync connection: from_uuid7 → uuid7 (target)."""
+    body = await request.json()
+    from_uuid7 = body.get("from_uuid7", "").strip()
+    if not from_uuid7:
+        raise HTTPException(status_code=400, detail="from_uuid7 required")
+
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO connections (from_uuid7, to_uuid7, synced_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(from_uuid7, to_uuid7) DO NOTHING
+            """,
+            (from_uuid7, uuid7, datetime.now().isoformat()),
+        )
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        raise HTTPException(status_code=500, detail=str(e))
+    conn.close()
+    return {"success": True}
+
+
+@app.delete("/api/users/{uuid7}/sync")
+async def unsync_users(uuid7: str, request: Request):
+    """Remove a sync connection."""
+    my_did = get_current_did(request)
+    # Resolve to uuid7 if needed
+    conn = get_db_connection()
+    row = conn.execute("SELECT uuid7 FROM users WHERE peer_id = ?", (my_did,)).fetchone()
+    from_uuid7 = row["uuid7"] if row and row["uuid7"] else my_did
+    conn.execute(
+        "DELETE FROM connections WHERE from_uuid7 = ? AND to_uuid7 = ?",
+        (from_uuid7, uuid7),
+    )
+    conn.commit()
+    conn.close()
+    return {"success": True}
+
+
+@app.get("/api/users/{uuid7}/connections")
+async def get_user_connections(uuid7: str):
+    """Get all users that this user has synced with."""
+    conn = get_db_connection()
+    rows = conn.execute(
+        """
+        SELECT u.peer_id, u.did, u.uuid7, u.username, u.avatar, u.bio
+        FROM connections c
+        JOIN users u ON u.uuid7 = c.to_uuid7
+        WHERE c.from_uuid7 = ?
+        """,
+        (uuid7,),
+    ).fetchall()
+    conn.close()
+    return {"connections": [dict(r) for r in rows], "count": len(rows)}
+
 @app.post("/api/auth/generate-identity")
 async def generate_identity():
     """Generate a new P2P DID (did:key) and secret key"""
