@@ -10,6 +10,12 @@ import { useToast } from '@/components/Toast';
 import api from '@/lib/api';
 import { pushSyncToBackend } from '@/lib/sync';
 
+const D = {
+    bright: 'rgba(255,255,255,0.88)',
+    mid:    'rgba(255,255,255,0.55)',
+    dim:    'rgba(255,255,255,0.32)',
+};
+
 function AvatarImg({ src, size = 96 }: { src: string; size?: number }) {
     if (src) {
         return (
@@ -19,9 +25,18 @@ function AvatarImg({ src, size = 96 }: { src: string; size?: number }) {
         );
     }
     return (
-        <div className="rounded-3xl flex items-center justify-center shadow-lg"
-            style={{ width: size, height: size, background: 'linear-gradient(135deg,#ede9fe,#ddd6fe)', fontSize: size * 0.4 }}>
-            👤
+        <div
+            className="rounded-3xl flex items-center justify-center font-bold"
+            style={{
+                width: size,
+                height: size,
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.09)',
+                color: D.dim,
+                fontSize: size * 0.35,
+            }}
+        >
+            ◈
         </div>
     );
 }
@@ -47,14 +62,13 @@ export default function UserProfilePage() {
     const [synced, setSynced] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [isOwnProfile, setIsOwnProfile] = useState(false);
-    const [theySync, setTheySync] = useState(false); // they have synced me back → mutual
+    const [theySync, setTheySync] = useState(false);
 
     useEffect(() => {
         if (!uuid7Param) return;
 
         const myIdentity = getIdentity();
 
-        // Own profile?
         if (myIdentity?.uuid7 === uuid7Param) {
             setIsOwnProfile(true);
             setUser({
@@ -70,7 +84,6 @@ export default function UserProfilePage() {
 
         setSynced(isSynced(uuid7Param));
 
-        // 1. Try local connections cache first (instant load)
         const allConns: Connection[] = JSON.parse(
             typeof window !== 'undefined' ? (localStorage.getItem('bucks_connections_v2') ?? '[]') : '[]'
         );
@@ -80,7 +93,6 @@ export default function UserProfilePage() {
             setLoadState('found');
         }
 
-        // 2. Fetch fresh from backend
         api.get<UserData>(`/users/${uuid7Param}`)
             .then(res => {
                 setUser(res.data);
@@ -90,7 +102,6 @@ export default function UserProfilePage() {
                 if (!cached) setLoadState('not_found');
             });
 
-        // 3. Check if they have also synced back (mutual sync check)
         {
             const me = getIdentity();
             if (me?.uuid7) {
@@ -129,7 +140,7 @@ export default function UserProfilePage() {
                 };
                 addConnection(conn);
                 setSynced(true);
-                showToast(`Synced with ${user.username}! 🔗`, 'success');
+                showToast(`Synced with ${user.username}`, 'success');
                 if (myIdentity?.uuid7) {
                     pushSyncToBackend(myIdentity.uuid7, user.uuid7);
                 }
@@ -148,27 +159,28 @@ export default function UserProfilePage() {
         <div className="min-h-screen p-4 pb-24 max-w-lg mx-auto">
             <button
                 onClick={() => router.back()}
-                className="flex items-center gap-2 text-sm text-gray-500 hover:text-primary transition-colors mb-4"
+                className="flex items-center gap-2 text-sm transition-opacity hover:opacity-70 mb-4"
+                style={{ color: D.dim }}
             >
                 <FaArrowLeft className="text-xs" /> Back
             </button>
 
             {loadState === 'loading' && (
                 <div className="flex items-center justify-center py-32">
-                    <div className="w-10 h-10 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                    <div className="w-10 h-10 border-2 border-white/10 border-t-white/30 rounded-full animate-spin" />
                 </div>
             )}
 
             {loadState === 'not_found' && (
                 <div style={{ ...G.medium, borderRadius: 28, position: 'relative', overflow: 'hidden' }} className="p-10 text-center space-y-3">
                     <Iris />
-                    <p className="text-4xl">🌐</p>
-                    <h2 className="text-lg font-bold text-gray-900">Profile not found</h2>
-                    <p className="text-sm text-gray-500">
+                    <Specular />
+                    <h2 className="text-lg font-bold" style={{ color: D.bright }}>Profile not found</h2>
+                    <p className="text-sm" style={{ color: D.dim }}>
                         This UUID isn't registered yet or the backend is offline.<br />
                         Ask the person to share their profile link directly.
                     </p>
-                    <p className="font-mono text-xs text-gray-400 break-all">{uuid7Param}</p>
+                    <p className="font-mono text-xs break-all" style={{ color: 'rgba(255,255,255,0.20)' }}>{uuid7Param}</p>
                 </div>
             )}
 
@@ -188,11 +200,16 @@ export default function UserProfilePage() {
                                         <button
                                             onClick={handleSync}
                                             disabled={syncing}
-                                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-green-300 bg-green-50 text-green-700 font-semibold text-sm hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-all group"
+                                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all group"
+                                            style={{
+                                                background: 'rgba(255,255,255,0.06)',
+                                                border: '1px solid rgba(255,255,255,0.12)',
+                                                color: D.mid,
+                                            }}
                                         >
                                             <FaCheck className="group-hover:hidden" />
                                             <FaUserMinus className="hidden group-hover:block" />
-                                            <span className="group-hover:hidden">Synced ✓</span>
+                                            <span className="group-hover:hidden">Synced</span>
                                             <span className="hidden group-hover:block">Remove</span>
                                         </button>
                                     ) : (
@@ -202,7 +219,7 @@ export default function UserProfilePage() {
                                             style={{ padding: '10px 20px', borderRadius: 12, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}
                                         >
                                             {syncing
-                                                ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                ? <div className="w-4 h-4 border-2 border-white/30 border-t-white/70 rounded-full animate-spin" />
                                                 : <FaRotate />
                                             }
                                             Sync
@@ -212,28 +229,36 @@ export default function UserProfilePage() {
                             )}
                         </div>
 
-                        <h1 className="text-2xl font-bold text-gray-900">{user.username}</h1>
-                        {user.bio && <p className="text-sm text-gray-600 mt-1">{user.bio}</p>}
+                        <h1 className="text-2xl font-bold" style={{ color: D.bright }}>{user.username}</h1>
+                        {user.bio && <p className="text-sm mt-1" style={{ color: D.mid }}>{user.bio}</p>}
 
                         <div className="mt-3 flex items-center gap-2 flex-wrap">
-                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/8 border border-primary/15">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-primary/60">UUID</span>
-                                <span className="font-mono text-xs text-primary">{user.uuid7}</span>
+                            <div
+                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg"
+                                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                            >
+                                <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: D.dim }}>UUID</span>
+                                <span className="font-mono text-xs" style={{ color: D.mid }}>{user.uuid7}</span>
                             </div>
+
                             <button
                                 onClick={copyProfileLink}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-primary border border-gray-200 hover:border-primary/30 transition-all"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all"
+                                style={{ border: '1px solid rgba(255,255,255,0.08)', color: D.dim }}
                             >
                                 <FaLink className="text-[10px]" /> Share
                             </button>
+
                             {/* Message button — only for mutual syncs */}
                             {!isOwnProfile && synced && theySync && (
                                 <button
                                     onClick={() => router.push(`/messages/${user.uuid7}`)}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
                                     style={{
-                                        background: 'linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)',
-                                        boxShadow: '0 3px 10px rgba(106,0,255,0.3)',
+                                        background: 'linear-gradient(145deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.06) 100%)',
+                                        border: '1px solid rgba(255,255,255,0.18)',
+                                        boxShadow: '0 4px 16px rgba(0,0,0,0.30), inset 0 1.5px 0 rgba(255,255,255,0.20)',
+                                        color: D.bright,
                                     }}
                                 >
                                     <FaMessage className="text-[10px]" /> Message
@@ -242,9 +267,16 @@ export default function UserProfilePage() {
                         </div>
 
                         {isOwnProfile && (
-                            <div className="mt-4 p-3 rounded-xl bg-primary/5 border border-primary/15 text-center">
-                                <p className="text-xs text-primary">This is your profile.</p>
-                                <button onClick={() => router.push('/profile')} className="text-xs font-semibold text-primary underline mt-1">
+                            <div
+                                className="mt-4 p-3 rounded-xl text-center"
+                                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+                            >
+                                <p className="text-xs" style={{ color: D.dim }}>This is your profile.</p>
+                                <button
+                                    onClick={() => router.push('/profile')}
+                                    className="text-xs font-semibold underline mt-1 transition-opacity hover:opacity-70"
+                                    style={{ color: D.mid }}
+                                >
                                     Go to profile settings →
                                 </button>
                             </div>
@@ -253,15 +285,17 @@ export default function UserProfilePage() {
 
                     {/* ── DID ── */}
                     <div style={{ ...G.light, borderRadius: 20 }} className="p-4">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Cryptographic Identity (DID)</p>
-                        <p className="font-mono text-xs text-gray-600 break-all leading-relaxed">{user.did}</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: D.dim }}>
+                            Cryptographic Identity (DID)
+                        </p>
+                        <p className="font-mono text-xs break-all leading-relaxed" style={{ color: 'rgba(255,255,255,0.40)' }}>{user.did}</p>
                     </div>
 
                     {/* ── Short ID ── */}
                     <div style={{ ...G.light, borderRadius: 20 }} className="p-4 text-center">
-                        <p className="text-xs text-gray-400 mb-1">Short ID</p>
-                        <p className="font-mono text-2xl font-bold text-gray-700 tracking-wider">{shortUUID(user.uuid7)}</p>
-                        <p className="text-xs text-gray-400 mt-1">Share this 8-char ID for quick lookup</p>
+                        <p className="text-xs mb-1" style={{ color: D.dim }}>Short ID</p>
+                        <p className="font-mono text-2xl font-bold tracking-wider" style={{ color: D.bright }}>{shortUUID(user.uuid7)}</p>
+                        <p className="text-xs mt-1" style={{ color: D.dim }}>Share this 8-char ID for quick lookup</p>
                     </div>
                 </div>
             )}

@@ -1,14 +1,27 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #ffffff;
-  --color-foreground: #171717;
-  --color-primary: #6A00FF;
-  --color-primary-hover: #6D28D9;
-  --color-secondary: #6B7280;
-  --color-accent: #EC4899;
-  --color-glass: rgba(255, 255, 255, 0.8);
-  --color-glass-border: rgba(255, 255, 255, 0.5);
+  /* Dark mode color palette */
+  --color-background: #080810;
+  --color-foreground: #e2e2ee;
+  --color-primary: #d0d0e0;
+  --color-primary-hover: #ffffff;
+  --color-secondary: #6b6b80;
+  --color-accent: #a0a0b8;
+  --color-glass: rgba(255, 255, 255, 0.05);
+  --color-glass-border: rgba(255, 255, 255, 0.09);
+
+  /* Remap Tailwind grays for dark-first rendering */
+  --color-gray-50:  #0e0e1a;
+  --color-gray-100: #14141f;
+  --color-gray-200: #1c1c28;
+  --color-gray-300: #2a2a38;
+  --color-gray-400: #4a4a60;
+  --color-gray-500: #6b6b80;
+  --color-gray-600: #9090a8;
+  --color-gray-700: #b8b8cc;
+  --color-gray-800: #d0d0e0;
+  --color-gray-900: #e8e8f2;
 
   /* Font — use the Outfit variable injected by next/font */
   --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
@@ -30,13 +43,14 @@
 /* Base styles */
 body {
   color: var(--color-foreground);
-  background: linear-gradient(135deg, #f0e6ff 0%, #e8f0ff 25%, #fce8ff 50%, #e0f0ff 75%, #f5e6ff 100%);
+  background: #080810;
   background-attachment: fixed;
   min-height: 100vh;
   font-family: var(--font-sans);
+  color-scheme: dark;
 }
 
-/* Animated ambient blobs */
+/* Subtle animated depth blobs — near-black with faint luminance */
 @keyframes blob1 {
   0%, 100% { transform: translate(0, 0) scale(1); }
   33% { transform: translate(30px, -20px) scale(1.1); }
@@ -53,19 +67,19 @@ body {
 }
 
 .glass-blob-1 {
-  position: fixed; top: -100px; left: -100px; width: 500px; height: 500px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(138,43,226,0.18) 0%, transparent 70%);
-  animation: blob1 12s ease-in-out infinite; pointer-events: none; z-index: 0;
+  position: fixed; top: -100px; left: -100px; width: 600px; height: 600px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.025) 0%, transparent 70%);
+  animation: blob1 14s ease-in-out infinite; pointer-events: none; z-index: 0;
 }
 .glass-blob-2 {
-  position: fixed; top: 40%; right: -150px; width: 600px; height: 600px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(100,180,255,0.14) 0%, transparent 70%);
-  animation: blob2 15s ease-in-out infinite; pointer-events: none; z-index: 0;
+  position: fixed; top: 35%; right: -160px; width: 700px; height: 700px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.018) 0%, transparent 70%);
+  animation: blob2 18s ease-in-out infinite; pointer-events: none; z-index: 0;
 }
 .glass-blob-3 {
-  position: fixed; bottom: -100px; left: 30%; width: 450px; height: 450px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(200,100,255,0.12) 0%, transparent 70%);
-  animation: blob3 10s ease-in-out infinite; pointer-events: none; z-index: 0;
+  position: fixed; bottom: -120px; left: 28%; width: 500px; height: 500px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.015) 0%, transparent 70%);
+  animation: blob3 11s ease-in-out infinite; pointer-events: none; z-index: 0;
 }
 
 @layer utilities {
@@ -80,4 +94,77 @@ body {
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+}
+
+/* ── Dark-glass overrides for legacy light-theme Tailwind classes ────────────
+   These ensure any component still using bg-white / border-white renders
+   correctly on the dark background without needing a full rewrite.          */
+@layer base {
+  /* Surface whites → near-black dark glass */
+  .bg-white         { background-color: rgba(255,255,255,0.05) !important; }
+  .bg-white\/10     { background-color: rgba(255,255,255,0.04) !important; }
+  .bg-white\/20     { background-color: rgba(255,255,255,0.05) !important; }
+  .bg-white\/40     { background-color: rgba(255,255,255,0.05) !important; }
+  .bg-white\/50     { background-color: rgba(255,255,255,0.04) !important; }
+  .bg-white\/60     { background-color: rgba(255,255,255,0.05) !important; }
+  .bg-white\/70     { background-color: rgba(255,255,255,0.06) !important; }
+  .bg-white\/80     { background-color: rgba(255,255,255,0.07) !important; }
+
+  /* Borders on white → subtle glass rim */
+  .border-white\/70 { border-color: rgba(255,255,255,0.09) !important; }
+  .border-white\/80 { border-color: rgba(255,255,255,0.10) !important; }
+
+  /* Green/red/blue semantic surfaces → dark glass tints */
+  .bg-green-50      { background-color: rgba(120,255,120,0.06) !important; }
+  .bg-red-50        { background-color: rgba(255,100,100,0.06) !important; }
+  .bg-blue-50       { background-color: rgba(120,160,255,0.06) !important; }
+  .bg-amber-50      { background-color: rgba(255,200,80,0.06) !important; }
+  .bg-purple-50     { background-color: rgba(200,150,255,0.05) !important; }
+
+  /* Semantic border colours */
+  .border-green-100 { border-color: rgba(120,255,120,0.14) !important; }
+  .border-green-200 { border-color: rgba(120,255,120,0.18) !important; }
+  .border-red-100   { border-color: rgba(255,100,100,0.14) !important; }
+  .border-red-200   { border-color: rgba(255,100,100,0.18) !important; }
+  .border-blue-100  { border-color: rgba(120,160,255,0.14) !important; }
+  .border-amber-200 { border-color: rgba(255,200,80,0.18) !important; }
+  .border-purple-200{ border-color: rgba(200,150,255,0.15) !important; }
+
+  /* Semantic text colours — muted tints */
+  .text-green-500   { color: rgba(120,255,120,0.80) !important; }
+  .text-green-600   { color: rgba(100,220,100,0.80) !important; }
+  .text-green-700   { color: rgba(160,255,160,0.85) !important; }
+  .text-green-800   { color: rgba(180,255,180,0.90) !important; }
+  .text-red-400     { color: rgba(255,140,140,0.75) !important; }
+  .text-red-500     { color: rgba(255,120,120,0.80) !important; }
+  .text-red-800     { color: rgba(255,160,160,0.90) !important; }
+  .text-blue-500    { color: rgba(140,180,255,0.80) !important; }
+  .text-blue-800    { color: rgba(180,200,255,0.90) !important; }
+  .text-amber-700   { color: rgba(255,200,100,0.80) !important; }
+  .text-purple-400  { color: rgba(200,150,255,0.70) !important; }
+  .text-purple-500  { color: rgba(200,150,255,0.80) !important; }
+
+  /* Hover variants that expand the light bg */
+  .hover\:bg-red-50:hover    { background-color: rgba(255,100,100,0.08) !important; }
+  .hover\:bg-gray-50:hover   { background-color: rgba(255,255,255,0.05) !important; }
+  .hover\:bg-white\/80:hover { background-color: rgba(255,255,255,0.08) !important; }
+  .hover\:bg-purple-50:hover { background-color: rgba(200,150,255,0.06) !important; }
+
+  /* Primary colour chips still use bg-primary → now maps to #d0d0e0 (white-ish) */
+  .bg-primary { background-color: rgba(255,255,255,0.15) !important; }
+  .hover\:bg-primary\/80:hover { background-color: rgba(255,255,255,0.20) !important; }
+  .hover\:bg-primary\/5:hover  { background-color: rgba(255,255,255,0.04) !important; }
+  .hover\:bg-primary\/10:hover { background-color: rgba(255,255,255,0.06) !important; }
+  .bg-primary\/5  { background-color: rgba(255,255,255,0.03) !important; }
+  .bg-primary\/8  { background-color: rgba(255,255,255,0.04) !important; }
+  .bg-primary\/10 { background-color: rgba(255,255,255,0.05) !important; }
+
+  /* text-primary now maps to #d0d0e0 which is fine on dark */
+  .border-primary\/15 { border-color: rgba(255,255,255,0.08) !important; }
+  .border-primary\/30 { border-color: rgba(255,255,255,0.12) !important; }
+  .text-primary\/60   { color: rgba(255,255,255,0.45) !important; }
+  .text-primary\/70   { color: rgba(255,255,255,0.55) !important; }
+
+  /* Input placeholder in dark */
+  ::placeholder { color: rgba(255,255,255,0.28) !important; }
 }

@@ -27,7 +27,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     }, [pathname]);
 
     return (
-        <div className="min-h-screen relative bg-gray-50/50">
+        <div className="min-h-screen relative" style={{ background: 'transparent' }}>
             {/* Top-right actions (notifications, search) — hide on full-screen pages */}
             {!isFullScreen && <TopRightActions />}
 

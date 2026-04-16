@@ -11,11 +11,15 @@ import { saveIdentity } from '@/lib/identity';
 import { shortUUID } from '@/lib/uuid7';
 import { compressAvatar } from '@/lib/imageUtils';
 import { useToast } from '@/components/Toast';
-import api from '@/lib/api';
 import { ensureRegistered } from '@/lib/sync';
 
-type Step = 'choose' | 'generated' | 'profile';
+const D = {
+    bright: 'rgba(255,255,255,0.88)',
+    mid:    'rgba(255,255,255,0.55)',
+    dim:    'rgba(255,255,255,0.32)',
+};
 
+type Step = 'choose' | 'generated' | 'profile';
 interface GeneratedIdentity { did: string; uuid7: string; secret: string; }
 
 export default function LoginPage() {
@@ -29,13 +33,11 @@ export default function LoginPage() {
     const [didCopied, setDidCopied] = useState(false);
     const [uuidCopied, setUuidCopied] = useState(false);
 
-    // Profile setup
     const [username, setUsername] = useState('');
     const [bio, setBio] = useState('');
     const [photoDataUrl, setPhotoDataUrl] = useState<string>('');
     const [photoLoading, setPhotoLoading] = useState(false);
 
-    // ── Generate DID + UUID7 ──────────────────────────────────────────────────
     const handleCreate = async () => {
         setIsBusy(true);
         try {
@@ -65,7 +67,6 @@ export default function LoginPage() {
         URL.revokeObjectURL(url);
     };
 
-    // ── Photo selection ───────────────────────────────────────────────────────
     const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -81,7 +82,6 @@ export default function LoginPage() {
         }
     };
 
-    // ── Enter app ─────────────────────────────────────────────────────────────
     const handleEnter = async () => {
         if (!identity || !username.trim()) {
             showToast('Please enter a username.', 'error');
@@ -99,23 +99,16 @@ export default function LoginPage() {
                 createdAt: new Date().toISOString(),
             };
             saveIdentity(profile);
-
-            // Register with backend — retry up to 3× so the user is discoverable
             const ok = await ensureRegistered(profile);
             if (!ok) {
-                showToast(
-                    'Profile saved locally. Could not reach the server — you may not appear in search until your device reconnects.',
-                    'info',
-                );
+                showToast('Saved locally. Server unreachable — you may not appear in search until reconnected.', 'info');
             }
-
             router.push('/profile');
         } finally {
             setIsBusy(false);
         }
     };
 
-    // ── Import existing ───────────────────────────────────────────────────────
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -138,10 +131,7 @@ export default function LoginPage() {
                     createdAt: parsed.createdAt || new Date().toISOString(),
                 };
                 saveIdentity(imported);
-
-                // Re-register with backend so this device shows up in search
                 ensureRegistered(imported).catch(() => {});
-
                 showToast('Identity restored!', 'success');
                 router.push('/profile');
             } catch { showToast('Could not read file.', 'error'); }
@@ -155,7 +145,18 @@ export default function LoginPage() {
         else { setUuidCopied(true); setTimeout(() => setUuidCopied(false), 2000); }
     };
 
-    // ── UI ────────────────────────────────────────────────────────────────────
+    const inputStyle: React.CSSProperties = {
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(255,255,255,0.09)',
+        color: D.bright,
+        caretColor: 'rgba(255,255,255,0.70)',
+        borderRadius: 12,
+        width: '100%',
+        padding: '12px 16px',
+        fontSize: 14,
+        outline: 'none',
+    };
+
     return (
         <div className="min-h-screen flex flex-col items-center justify-center p-6">
             <div
@@ -169,33 +170,61 @@ export default function LoginPage() {
                 {step === 'choose' && (
                     <div className="space-y-6">
                         <div className="text-center">
-                            <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-white text-3xl mx-auto mb-4 shadow-lg shadow-primary/30">
+                            <div
+                                className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4"
+                                style={{
+                                    background: 'rgba(255,255,255,0.07)',
+                                    border: '1px solid rgba(255,255,255,0.14)',
+                                    boxShadow: '0 4px 24px rgba(0,0,0,0.40), inset 0 1.5px 0 rgba(255,255,255,0.20)',
+                                    color: D.mid,
+                                }}
+                            >
                                 <FaFingerprint />
                             </div>
-                            <h1 className="text-2xl font-bold">Bucks Global</h1>
-                            <p className="text-sm text-gray-500 mt-1">Decentralised identity · No passwords</p>
+                            <h1 className="text-2xl font-bold" style={{ color: D.bright }}>Bucks Global</h1>
+                            <p className="text-sm mt-1" style={{ color: D.dim }}>Decentralised identity · No passwords</p>
                         </div>
 
-                        <button onClick={handleCreate} disabled={isBusy}
-                            className="w-full p-4 rounded-2xl flex items-center gap-4 text-left group transition-all hover:bg-primary/5 border border-gray-100 hover:border-primary/30">
-                            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform text-xl">🔑</div>
+                        <button
+                            onClick={handleCreate}
+                            disabled={isBusy}
+                            className="w-full p-4 rounded-2xl flex items-center gap-4 text-left group transition-all"
+                            style={{
+                                background: 'rgba(255,255,255,0.04)',
+                                border: '1px solid rgba(255,255,255,0.08)',
+                            }}
+                        >
+                            <div
+                                className="w-12 h-12 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform"
+                                style={{ background: 'rgba(255,255,255,0.06)', color: D.mid }}
+                            >
+                                ◈
+                            </div>
                             <div className="flex-1">
-                                <p className="font-bold text-gray-900">Create New Identity</p>
-                                <p className="text-xs text-gray-500">Generate your DID + unique UUID</p>
+                                <p className="font-bold" style={{ color: D.bright }}>Create New Identity</p>
+                                <p className="text-xs" style={{ color: D.dim }}>Generate your DID + unique UUID</p>
                             </div>
                             {isBusy
-                                ? <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                                : <FaArrowRight className="text-gray-300 group-hover:text-primary transition-colors" />
+                                ? <div className="w-5 h-5 border-2 border-white/20 border-t-white/50 rounded-full animate-spin" />
+                                : <FaArrowRight style={{ color: D.dim }} className="group-hover:opacity-80 transition-opacity" />
                             }
                         </button>
 
-                        <label className="w-full p-4 rounded-2xl flex items-center gap-4 text-left group transition-all hover:bg-purple-50 border border-gray-100 hover:border-purple-200 cursor-pointer">
-                            <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center text-purple-500 group-hover:scale-110 transition-transform text-xl"><FaFileImport /></div>
-                            <div className="flex-1">
-                                <p className="font-bold text-gray-900">Import Identity</p>
-                                <p className="text-xs text-gray-500">Restore from your identity.json file</p>
+                        <label
+                            className="w-full p-4 rounded-2xl flex items-center gap-4 text-left group transition-all cursor-pointer"
+                            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+                        >
+                            <div
+                                className="w-12 h-12 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform"
+                                style={{ background: 'rgba(255,255,255,0.04)', color: D.dim }}
+                            >
+                                <FaFileImport />
                             </div>
-                            <FaArrowRight className="text-gray-300 group-hover:text-purple-400 transition-colors" />
+                            <div className="flex-1">
+                                <p className="font-bold" style={{ color: D.bright }}>Import Identity</p>
+                                <p className="text-xs" style={{ color: D.dim }}>Restore from your identity.json file</p>
+                            </div>
+                            <FaArrowRight style={{ color: D.dim }} className="group-hover:opacity-80 transition-opacity" />
                             <input type="file" accept=".json" className="hidden" onChange={handleImport} />
                         </label>
                     </div>
@@ -204,41 +233,65 @@ export default function LoginPage() {
                 {/* STEP 2 — GENERATED */}
                 {step === 'generated' && identity && (
                     <div className="space-y-5">
-                        <button onClick={() => setStep('choose')} className="flex items-center gap-2 text-sm text-gray-500 hover:text-primary transition-colors">
+                        <button
+                            onClick={() => setStep('choose')}
+                            className="flex items-center gap-2 text-sm transition-opacity hover:opacity-70"
+                            style={{ color: D.dim }}
+                        >
                             <FaArrowLeft className="text-xs" /> Back
                         </button>
-                        <div className="flex items-center gap-3 p-4 rounded-2xl bg-green-50 border border-green-100">
-                            <FaCircleCheck className="text-2xl text-green-500 shrink-0" />
+
+                        <div
+                            className="flex items-center gap-3 p-4 rounded-2xl"
+                            style={{ background: 'rgba(120,255,120,0.06)', border: '1px solid rgba(120,255,120,0.14)' }}
+                        >
+                            <FaCircleCheck className="text-2xl shrink-0" style={{ color: 'rgba(120,255,120,0.80)' }} />
                             <div>
-                                <p className="font-bold text-green-700">Identity Created!</p>
-                                <p className="text-xs text-green-600">Save your key file — it can't be recovered if lost.</p>
+                                <p className="font-bold" style={{ color: 'rgba(180,255,180,0.90)' }}>Identity Created!</p>
+                                <p className="text-xs" style={{ color: 'rgba(120,255,120,0.55)' }}>Save your key file — it can't be recovered if lost.</p>
                             </div>
                         </div>
 
                         <div style={{ ...G.medium, borderRadius: 16, padding: 16 }}>
                             <div className="flex items-center justify-between mb-1">
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Your UUID</p>
-                                <button onClick={() => copyText(identity.uuid7, 'uuid')} className="text-xs text-primary flex items-center gap-1">
-                                    {uuidCopied ? <><FaCheck className="text-green-500" /> Copied</> : <><FaCopy /> Copy</>}
+                                <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: D.dim }}>Your UUID</p>
+                                <button
+                                    onClick={() => copyText(identity.uuid7, 'uuid')}
+                                    className="text-xs flex items-center gap-1 transition-opacity hover:opacity-70"
+                                    style={{ color: D.mid }}
+                                >
+                                    {uuidCopied ? <><FaCheck style={{ color: 'rgba(120,255,120,0.80)' }} /> Copied</> : <><FaCopy /> Copy</>}
                                 </button>
                             </div>
-                            <p className="font-mono text-sm font-bold text-gray-800 break-all">{identity.uuid7}</p>
+                            <p className="font-mono text-sm font-bold break-all" style={{ color: D.bright }}>{identity.uuid7}</p>
                         </div>
 
                         <div style={{ ...G.light, borderRadius: 16, padding: 16 }}>
                             <div className="flex items-center justify-between mb-1">
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">DID (cryptographic key)</p>
-                                <button onClick={() => copyText(identity.did, 'did')} className="text-xs text-primary flex items-center gap-1">
-                                    {didCopied ? <><FaCheck className="text-green-500" /> Copied</> : <><FaCopy /> Copy</>}
+                                <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: D.dim }}>DID (cryptographic key)</p>
+                                <button
+                                    onClick={() => copyText(identity.did, 'did')}
+                                    className="text-xs flex items-center gap-1 transition-opacity hover:opacity-70"
+                                    style={{ color: D.mid }}
+                                >
+                                    {didCopied ? <><FaCheck style={{ color: 'rgba(120,255,120,0.80)' }} /> Copied</> : <><FaCopy /> Copy</>}
                                 </button>
                             </div>
-                            <p className="font-mono text-xs text-gray-600 break-all leading-relaxed">{identity.did}</p>
+                            <p className="font-mono text-xs break-all leading-relaxed" style={{ color: D.mid }}>{identity.did}</p>
                         </div>
 
-                        <button onClick={handleDownload}
-                            className="w-full py-3 rounded-xl border-2 border-primary/30 text-primary font-semibold flex items-center justify-center gap-2 hover:bg-primary hover:text-white hover:border-primary transition-all">
+                        <button
+                            onClick={handleDownload}
+                            className="w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all"
+                            style={{
+                                background: 'rgba(255,255,255,0.04)',
+                                border: '1px solid rgba(255,255,255,0.10)',
+                                color: D.mid,
+                            }}
+                        >
                             <FaDownload /> Download Key File
                         </button>
+
                         <PurpleButton onClick={() => setStep('profile')} style={{ width: '100%', padding: '14px', borderRadius: 12, fontSize: 15 }}>
                             Set Up Profile →
                         </PurpleButton>
@@ -248,12 +301,16 @@ export default function LoginPage() {
                 {/* STEP 3 — PROFILE SETUP */}
                 {step === 'profile' && identity && (
                     <div className="space-y-5">
-                        <button onClick={() => setStep('generated')} className="flex items-center gap-2 text-sm text-gray-500 hover:text-primary transition-colors">
+                        <button
+                            onClick={() => setStep('generated')}
+                            className="flex items-center gap-2 text-sm transition-opacity hover:opacity-70"
+                            style={{ color: D.dim }}
+                        >
                             <FaArrowLeft className="text-xs" /> Back
                         </button>
                         <div>
-                            <h2 className="text-xl font-bold text-gray-900">Set up your profile</h2>
-                            <p className="text-sm text-gray-500 mt-1">Add a photo and tell people who you are.</p>
+                            <h2 className="text-xl font-bold" style={{ color: D.bright }}>Set up your profile</h2>
+                            <p className="text-sm mt-1" style={{ color: D.dim }}>Add a photo and tell people who you are.</p>
                         </div>
 
                         {/* Photo upload */}
@@ -261,36 +318,37 @@ export default function LoginPage() {
                             <button
                                 type="button"
                                 onClick={() => photoInputRef.current?.click()}
-                                className="relative w-28 h-28 rounded-full overflow-hidden border-4 border-white shadow-xl hover:opacity-90 transition-opacity group"
-                                style={{ background: photoDataUrl ? 'transparent' : 'linear-gradient(135deg,#ede9fe,#ddd6fe)' }}
+                                className="relative w-28 h-28 rounded-full overflow-hidden group transition-opacity hover:opacity-80"
+                                style={{
+                                    background: photoDataUrl ? 'transparent' : 'rgba(255,255,255,0.06)',
+                                    border: '2px solid rgba(255,255,255,0.10)',
+                                }}
                             >
                                 {photoDataUrl
                                     ? <img src={photoDataUrl} alt="avatar" className="w-full h-full object-cover" />
                                     : <div className="w-full h-full flex flex-col items-center justify-center gap-1">
                                         {photoLoading
-                                            ? <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                            ? <div className="w-6 h-6 border-2 border-white/20 border-t-white/50 rounded-full animate-spin" />
                                             : <>
-                                                <FaCamera className="text-2xl text-primary/60" />
-                                                <span className="text-[10px] font-semibold text-primary/60">Add Photo</span>
+                                                <FaCamera className="text-2xl" style={{ color: D.dim }} />
+                                                <span className="text-[10px] font-semibold" style={{ color: D.dim }}>Add Photo</span>
                                             </>
                                         }
                                     </div>
                                 }
-                                {/* Overlay on hover */}
                                 {photoDataUrl && (
-                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                         <FaCamera className="text-white text-xl" />
                                     </div>
                                 )}
                             </button>
                             <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-                            <p className="text-xs text-gray-400">Tap to upload · will be cropped square</p>
+                            <p className="text-xs" style={{ color: D.dim }}>Tap to upload · cropped square</p>
                         </div>
 
-                        {/* Username */}
                         <div>
-                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-2">
-                                Username <span className="text-red-400">*</span>
+                            <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: D.dim }}>
+                                Username <span style={{ color: 'rgba(255,120,120,0.60)' }}>*</span>
                             </label>
                             <input
                                 type="text"
@@ -298,14 +356,13 @@ export default function LoginPage() {
                                 onChange={e => setUsername(e.target.value)}
                                 placeholder="Your display name"
                                 maxLength={32}
-                                className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white/70 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                                style={{ ...inputStyle }}
                             />
                         </div>
 
-                        {/* Bio */}
                         <div>
-                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-2">
-                                Bio <span className="text-gray-300">(optional)</span>
+                            <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: D.dim }}>
+                                Bio <span style={{ color: 'rgba(255,255,255,0.18)' }}>(optional)</span>
                             </label>
                             <textarea
                                 value={bio}
@@ -313,21 +370,22 @@ export default function LoginPage() {
                                 placeholder="Tell others a bit about yourself…"
                                 maxLength={160}
                                 rows={3}
-                                className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white/70 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all resize-none"
+                                style={{ ...inputStyle, resize: 'none' }}
                             />
                         </div>
 
                         <PurpleButton
                             onClick={handleEnter}
                             disabled={!username.trim() || isBusy}
-                            style={{ width: '100%', padding: '14px', borderRadius: 12, fontSize: 15, opacity: !username.trim() || isBusy ? 0.5 : 1 }}
+                            style={{ width: '100%', padding: '14px', borderRadius: 12, fontSize: 15, opacity: !username.trim() || isBusy ? 0.4 : 1 }}
                         >
                             {isBusy ? 'Saving…' : 'Enter App →'}
                         </PurpleButton>
                     </div>
                 )}
             </div>
-            <p className="mt-6 text-xs text-gray-400">Bucks Global · Decentralised Identity v2</p>
+
+            <p className="mt-6 text-xs" style={{ color: 'rgba(255,255,255,0.20)' }}>Bucks Global · Decentralised Identity v2</p>
         </div>
     );
 }

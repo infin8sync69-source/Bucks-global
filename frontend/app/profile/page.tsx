@@ -8,26 +8,33 @@ import { getIdentity, getConnections, removeConnection, clearIdentity, updateIde
 import { shortUUID } from '@/lib/uuid7';
 import { compressAvatar } from '@/lib/imageUtils';
 import { useToast } from '@/components/Toast';
-import api from '@/lib/api';
 import { ensureRegistered, restoreConnectionsFromBackend } from '@/lib/sync';
+
+const D = {
+    bright: 'rgba(255,255,255,0.88)',
+    mid:    'rgba(255,255,255,0.55)',
+    dim:    'rgba(255,255,255,0.32)',
+};
 
 function AvatarDisplay({ src, size = 80 }: { src: string; size?: number }) {
     if (src) {
         return (
-            <img
-                src={src}
-                alt="avatar"
-                className="rounded-2xl object-cover shadow-md"
-                style={{ width: size, height: size }}
-            />
+            <img src={src} alt="avatar" className="rounded-2xl object-cover" style={{ width: size, height: size }} />
         );
     }
     return (
         <div
-            className="rounded-2xl flex items-center justify-center shadow-md text-3xl select-none"
-            style={{ width: size, height: size, background: 'linear-gradient(135deg,#ede9fe,#ddd6fe)', fontSize: size * 0.4 }}
+            className="rounded-2xl flex items-center justify-center select-none font-bold"
+            style={{
+                width: size,
+                height: size,
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.09)',
+                color: D.dim,
+                fontSize: size * 0.35,
+            }}
         >
-            👤
+            ◈
         </div>
     );
 }
@@ -42,7 +49,6 @@ export default function OwnProfilePage() {
     const [copied, setCopied] = useState(false);
     const [editing, setEditing] = useState(false);
 
-    // Edit state
     const [editName, setEditName] = useState('');
     const [editBio, setEditBio] = useState('');
     const [editPhoto, setEditPhoto] = useState('');
@@ -57,7 +63,6 @@ export default function OwnProfilePage() {
         setEditBio(id.bio);
         setEditPhoto(id.avatar);
 
-        // Restore any connections recorded on other devices
         restoreConnectionsFromBackend(id.uuid7)
             .then(() => setConnections(getConnections()))
             .catch(() => {});
@@ -97,11 +102,8 @@ export default function OwnProfilePage() {
         setEditing(false);
         showToast('Profile updated!', 'success');
 
-        // Sync to backend with retry
         const ok = await ensureRegistered({ ...identity, ...patch });
-        if (!ok) {
-            showToast('Changes saved locally. Backend sync failed — will retry next time.', 'info');
-        }
+        if (!ok) showToast('Saved locally. Backend sync failed — will retry.', 'info');
     };
 
     const handleLogout = () => {
@@ -112,6 +114,18 @@ export default function OwnProfilePage() {
     const removeSync = (uuid7: string) => {
         removeConnection(uuid7);
         setConnections(getConnections());
+    };
+
+    const inputStyle: React.CSSProperties = {
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(255,255,255,0.09)',
+        color: D.bright,
+        caretColor: 'rgba(255,255,255,0.70)',
+        borderRadius: 12,
+        width: '100%',
+        padding: '12px 16px',
+        fontSize: 14,
+        outline: 'none',
     };
 
     return (
@@ -125,42 +139,69 @@ export default function OwnProfilePage() {
                 <div className="flex items-start justify-between mb-4">
                     <AvatarDisplay src={identity.avatar} size={80} />
                     <div className="flex gap-2">
-                        <button onClick={() => setEditing(e => !e)} style={G.btn}
-                            className="p-2.5 rounded-xl text-gray-500 hover:text-primary transition-colors" title="Edit">
+                        <button
+                            onClick={() => setEditing(e => !e)}
+                            className="p-2.5 rounded-xl transition-colors"
+                            style={{ ...G.btn, color: D.mid }}
+                            title="Edit"
+                        >
                             <FaPen className="text-sm" />
                         </button>
-                        <button onClick={handleLogout} style={G.btn}
-                            className="p-2.5 rounded-xl text-gray-500 hover:text-red-500 transition-colors" title="Sign out">
+                        <button
+                            onClick={handleLogout}
+                            className="p-2.5 rounded-xl transition-colors"
+                            style={{ ...G.btn, color: 'rgba(255,120,120,0.60)' }}
+                            title="Sign out"
+                        >
                             <FaArrowRightFromBracket className="text-sm" />
                         </button>
                     </div>
                 </div>
 
-                <h1 className="text-2xl font-bold text-gray-900">{identity.username}</h1>
-                {identity.bio && <p className="text-sm text-gray-600 mt-1">{identity.bio}</p>}
+                <h1 className="text-2xl font-bold" style={{ color: D.bright }}>{identity.username}</h1>
+                {identity.bio && <p className="text-sm mt-1" style={{ color: D.mid }}>{identity.bio}</p>}
 
-                <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/8 border border-primary/15">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-primary/60">UUID</span>
-                    <span className="font-mono text-xs text-primary">{identity.uuid7}</span>
+                <div
+                    className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                >
+                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: D.dim }}>UUID</span>
+                    <span className="font-mono text-xs" style={{ color: D.mid }}>{identity.uuid7}</span>
                 </div>
 
-                <div className="mt-4 flex items-center gap-2 p-3 rounded-xl border border-gray-100 bg-white/60">
-                    <span className="text-xs text-gray-500 truncate flex-1">{profileUrl}</span>
-                    <button onClick={copyLink} className="flex items-center gap-1.5 text-xs font-semibold text-primary shrink-0 hover:opacity-70 transition-opacity">
-                        {copied ? <><FaCheck className="text-green-500" /> Copied!</> : <><FaCopy /> Copy Link</>}
+                <div
+                    className="mt-4 flex items-center gap-2 p-3 rounded-xl"
+                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+                >
+                    <span className="text-xs truncate flex-1" style={{ color: D.dim }}>{profileUrl}</span>
+                    <button
+                        onClick={copyLink}
+                        className="flex items-center gap-1.5 text-xs font-semibold shrink-0 transition-opacity hover:opacity-70"
+                        style={{ color: D.mid }}
+                    >
+                        {copied
+                            ? <><FaCheck style={{ color: 'rgba(120,255,120,0.80)' }} /> Copied!</>
+                            : <><FaCopy /> Copy Link</>
+                        }
                     </button>
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="text-center p-3 rounded-xl bg-white/50 border border-white/70">
-                        <p className="text-xl font-bold text-gray-900">{connections.length}</p>
-                        <p className="text-xs text-gray-500">Synced</p>
+                    <div
+                        className="text-center p-3 rounded-xl"
+                        style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+                    >
+                        <p className="text-xl font-bold" style={{ color: D.bright }}>{connections.length}</p>
+                        <p className="text-xs" style={{ color: D.dim }}>Synced</p>
                     </div>
-                    <div className="text-center p-3 rounded-xl bg-white/50 border border-white/70">
-                        <p className="text-xl font-bold text-gray-900">
+                    <div
+                        className="text-center p-3 rounded-xl"
+                        style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+                    >
+                        <p className="text-xl font-bold" style={{ color: D.bright }}>
                             {new Date(identity.createdAt).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
                         </p>
-                        <p className="text-xs text-gray-500">Joined</p>
+                        <p className="text-xs" style={{ color: D.dim }}>Joined</p>
                     </div>
                 </div>
             </div>
@@ -168,45 +209,65 @@ export default function OwnProfilePage() {
             {/* ── Edit panel ── */}
             {editing && (
                 <div style={{ ...G.card, borderRadius: 24, position: 'relative', overflow: 'hidden' }} className="p-5 space-y-4">
-                    <h2 className="font-bold text-gray-900">Edit Profile</h2>
+                    <Specular />
+                    <h2 className="font-bold" style={{ color: D.bright }}>Edit Profile</h2>
 
                     {/* Photo upload */}
                     <div className="flex items-center gap-4">
-                        <button type="button" onClick={() => photoInputRef.current?.click()}
-                            className="relative w-20 h-20 rounded-2xl overflow-hidden border-2 border-dashed border-primary/30 hover:border-primary transition-colors group"
-                            style={{ background: editPhoto ? 'transparent' : 'linear-gradient(135deg,#ede9fe,#ddd6fe)' }}>
+                        <button
+                            type="button"
+                            onClick={() => photoInputRef.current?.click()}
+                            className="relative w-20 h-20 rounded-2xl overflow-hidden group"
+                            style={{
+                                background: editPhoto ? 'transparent' : 'rgba(255,255,255,0.05)',
+                                border: '1px solid rgba(255,255,255,0.12)',
+                            }}
+                        >
                             {editPhoto
                                 ? <img src={editPhoto} alt="preview" className="w-full h-full object-cover" />
                                 : <div className="w-full h-full flex items-center justify-center">
                                     {photoLoading
-                                        ? <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                                        : <FaCamera className="text-primary/50 text-xl" />
+                                        ? <div className="w-5 h-5 border-2 border-white/20 border-t-white/50 rounded-full animate-spin" />
+                                        : <FaCamera style={{ color: D.dim, fontSize: 20 }} />
                                     }
                                 </div>
                             }
                             {editPhoto && (
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     <FaCamera className="text-white text-lg" />
                                 </div>
                             )}
                         </button>
                         <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
                         <div>
-                            <p className="text-sm font-medium text-gray-700">Profile Photo</p>
-                            <p className="text-xs text-gray-400 mt-0.5">Tap to change · cropped square</p>
+                            <p className="text-sm font-medium" style={{ color: D.mid }}>Profile Photo</p>
+                            <p className="text-xs mt-0.5" style={{ color: D.dim }}>Tap to change</p>
                         </div>
                     </div>
 
-                    <input value={editName} onChange={e => setEditName(e.target.value)}
-                        placeholder="Username" maxLength={32}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white/70 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all" />
+                    <input
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        placeholder="Username"
+                        maxLength={32}
+                        style={{ ...inputStyle }}
+                    />
 
-                    <textarea value={editBio} onChange={e => setEditBio(e.target.value)}
-                        placeholder="Bio (optional)" maxLength={160} rows={2}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white/70 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all resize-none" />
+                    <textarea
+                        value={editBio}
+                        onChange={e => setEditBio(e.target.value)}
+                        placeholder="Bio (optional)"
+                        maxLength={160}
+                        rows={2}
+                        style={{ ...inputStyle, resize: 'none' }}
+                    />
 
                     <div className="flex gap-3">
-                        <button onClick={() => setEditing(false)} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-medium hover:bg-gray-50 transition-all">
+                        <button
+                            onClick={() => setEditing(false)}
+                            className="flex-1 py-3 rounded-xl font-medium transition-all"
+                            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: D.mid }}
+                        >
                             Cancel
                         </button>
                         <PurpleButton onClick={saveEdit} style={{ flex: 1, padding: '12px', borderRadius: 12, fontSize: 14 }}>
@@ -217,38 +278,53 @@ export default function OwnProfilePage() {
             )}
 
             {/* ── Synced users ── */}
-            <div style={{ ...G.medium, borderRadius: 24 }} className="p-5">
+            <div style={{ ...G.medium, borderRadius: 24, position: 'relative', overflow: 'hidden' }} className="p-5">
+                <Specular />
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="font-bold text-gray-900">Synced Users</h2>
-                    <span className="text-xs text-gray-500 px-2 py-1 rounded-full bg-gray-100">{connections.length}</span>
+                    <h2 className="font-bold" style={{ color: D.bright }}>Synced Users</h2>
+                    <span
+                        className="text-xs px-2 py-1 rounded-full"
+                        style={{ background: 'rgba(255,255,255,0.05)', color: D.dim }}
+                    >
+                        {connections.length}
+                    </span>
                 </div>
 
                 {connections.length === 0 ? (
                     <div className="text-center py-8 space-y-2">
-                        <p className="text-3xl">🔗</p>
-                        <p className="text-sm text-gray-500">No synced users yet.</p>
-                        <p className="text-xs text-gray-400">Use Search to find people and sync with them.</p>
+                        <p className="text-sm" style={{ color: D.dim }}>No synced users yet.</p>
+                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.20)' }}>Use Search to find people.</p>
                     </div>
                 ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                         {connections.map(conn => (
-                            <div key={conn.uuid7}
-                                className="flex items-center gap-3 p-3 rounded-2xl bg-white/60 border border-white/80 cursor-pointer hover:bg-white/80 transition-all group"
-                                onClick={() => router.push(`/profile/${conn.uuid7}`)}>
-                                <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0"
-                                    style={{ background: 'linear-gradient(135deg,#ede9fe,#ddd6fe)' }}>
+                            <div
+                                key={conn.uuid7}
+                                className="flex items-center gap-3 p-3 rounded-2xl cursor-pointer transition-all group"
+                                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+                                onClick={() => router.push(`/profile/${conn.uuid7}`)}
+                            >
+                                <div
+                                    className="w-11 h-11 rounded-xl overflow-hidden shrink-0"
+                                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                                >
                                     {conn.avatar
                                         ? <img src={conn.avatar} alt={conn.username} className="w-full h-full object-cover" />
-                                        : <div className="w-full h-full flex items-center justify-center text-xl">👤</div>
+                                        : <div className="w-full h-full flex items-center justify-center font-bold text-lg" style={{ color: D.dim }}>
+                                            {conn.username.charAt(0).toUpperCase()}
+                                        </div>
                                     }
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="font-semibold text-gray-900 truncate">{conn.username}</p>
-                                    <p className="text-xs text-gray-400 font-mono">{shortUUID(conn.uuid7)}</p>
+                                    <p className="font-semibold truncate" style={{ color: D.bright }}>{conn.username}</p>
+                                    <p className="text-xs font-mono" style={{ color: D.dim }}>{shortUUID(conn.uuid7)}</p>
                                 </div>
-                                <button onClick={e => { e.stopPropagation(); removeSync(conn.uuid7); }}
-                                    className="opacity-0 group-hover:opacity-100 p-2 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-all"
-                                    title="Remove sync">
+                                <button
+                                    onClick={e => { e.stopPropagation(); removeSync(conn.uuid7); }}
+                                    className="opacity-0 group-hover:opacity-100 p-2 rounded-lg transition-all"
+                                    style={{ color: 'rgba(255,100,100,0.55)' }}
+                                    title="Remove sync"
+                                >
                                     <FaUserMinus className="text-sm" />
                                 </button>
                             </div>

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { FaMessage, FaRotate } from 'react-icons/fa6';
+import { FaRotate } from 'react-icons/fa6';
 import { G, Iris, Specular } from '@/components/ui/Glass';
 import {
     fetchChatConversations,
@@ -39,11 +39,14 @@ function AvatarBubble({ src, name, size = 48 }: { src?: string; name: string; si
     }
     return (
         <div
-            className="rounded-2xl flex items-center justify-center shrink-0 text-xl font-bold text-primary/60"
+            className="rounded-2xl flex items-center justify-center shrink-0 font-bold"
             style={{
                 width: size,
                 height: size,
-                background: 'linear-gradient(135deg,#ede9fe,#ddd6fe)',
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.10)',
+                color: 'rgba(255,255,255,0.50)',
+                fontSize: size * 0.38,
             }}
         >
             {name.charAt(0).toUpperCase()}
@@ -85,31 +88,32 @@ export default function MessagesPage() {
         return null;
     }
 
-    // Contacts not already in conversations
     const conversationPeers = new Set(conversations.map(c => c.peer_uuid7));
     const freshContacts = contacts.filter(c => !conversationPeers.has(c.uuid7));
+
+    const dimText   = 'rgba(255,255,255,0.35)';
+    const midText   = 'rgba(255,255,255,0.55)';
+    const brightText = 'rgba(255,255,255,0.88)';
 
     return (
         <div className="min-h-screen p-4 pb-24 max-w-lg mx-auto">
             {/* Header */}
             <div className="flex items-center justify-between mb-6 pt-2">
                 <div>
-                    <h1 className="text-2xl font-black text-gray-900">Messages</h1>
-                    <p className="text-sm text-gray-500 mt-0.5">Encrypted · Peer-to-peer</p>
+                    <h1 className="text-2xl font-black" style={{ color: brightText }}>Messages</h1>
+                    <p className="text-sm mt-0.5" style={{ color: dimText }}>Encrypted · Peer-to-peer</p>
                 </div>
                 <button
                     onClick={load}
-                    className="w-9 h-9 flex items-center justify-center rounded-xl text-primary/70 hover:bg-primary/10 transition-colors"
+                    className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors"
+                    style={{ color: midText }}
                 >
                     <FaRotate className={loading ? 'animate-spin' : ''} />
                 </button>
             </div>
 
             {/* Tab bar */}
-            <div
-                style={{ ...G.light, borderRadius: 16 }}
-                className="flex p-1 mb-5 gap-1"
-            >
+            <div style={{ ...G.light, borderRadius: 16 }} className="flex p-1 mb-5 gap-1">
                 {(['chats', 'contacts'] as const).map(t => (
                     <button
                         key={t}
@@ -118,11 +122,12 @@ export default function MessagesPage() {
                         style={
                             tab === t
                                 ? {
-                                    background: 'linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)',
-                                    color: '#fff',
-                                    boxShadow: '0 4px 14px rgba(106,0,255,0.35)',
+                                    background: 'linear-gradient(145deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.07) 100%)',
+                                    border: '1px solid rgba(255,255,255,0.18)',
+                                    boxShadow: '0 4px 16px rgba(0,0,0,0.30), inset 0 1.5px 0 rgba(255,255,255,0.20)',
+                                    color: brightText,
                                 }
-                                : { color: 'rgba(100,0,200,0.5)' }
+                                : { color: dimText }
                         }
                     >
                         {t === 'chats' ? `Chats${conversations.length ? ` (${conversations.length})` : ''}` : 'New Chat'}
@@ -132,7 +137,7 @@ export default function MessagesPage() {
 
             {loading && (
                 <div className="flex items-center justify-center py-20">
-                    <div className="w-8 h-8 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                    <div className="w-8 h-8 border-2 border-t-white/40 border-white/10 rounded-full animate-spin" />
                 </div>
             )}
 
@@ -140,15 +145,12 @@ export default function MessagesPage() {
             {!loading && tab === 'chats' && (
                 <>
                     {conversations.length === 0 ? (
-                        <div
-                            style={{ ...G.medium, borderRadius: 24, position: 'relative', overflow: 'hidden' }}
-                            className="p-10 text-center space-y-3"
-                        >
+                        <div style={{ ...G.medium, borderRadius: 24, position: 'relative', overflow: 'hidden' }} className="p-10 text-center space-y-3">
                             <Iris />
-                            <div className="text-4xl">💬</div>
-                            <p className="font-bold text-gray-800">No messages yet</p>
-                            <p className="text-sm text-gray-500">
-                                Switch to <strong>New Chat</strong> to start a conversation with someone you've mutually synced.
+                            <Specular />
+                            <p className="font-bold" style={{ color: brightText }}>No messages yet</p>
+                            <p className="text-sm" style={{ color: dimText }}>
+                                Switch to <strong style={{ color: midText }}>New Chat</strong> to start a conversation with someone you've mutually synced.
                             </p>
                         </div>
                     ) : (
@@ -165,21 +167,22 @@ export default function MessagesPage() {
                                         <div className="relative">
                                             <AvatarBubble src={conv.avatar} name={conv.username} size={48} />
                                             {hasUnread && (
-                                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary rounded-full text-white text-[10px] font-bold flex items-center justify-center shadow">
+                                                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center"
+                                                    style={{ background: 'rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.95)', border: '1px solid rgba(255,255,255,0.28)' }}>
                                                     {conv.unread_count > 9 ? '9+' : conv.unread_count}
                                                 </span>
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center justify-between">
-                                                <p className={`font-bold truncate ${hasUnread ? 'text-gray-900' : 'text-gray-700'}`}>
+                                                <p className="font-bold truncate" style={{ color: hasUnread ? brightText : midText }}>
                                                     {conv.username}
                                                 </p>
-                                                <span className="text-[10px] text-gray-400 shrink-0 ml-2">
+                                                <span className="text-[10px] shrink-0 ml-2" style={{ color: dimText }}>
                                                     {timeAgo(conv.timestamp)}
                                                 </span>
                                             </div>
-                                            <p className={`text-sm truncate mt-0.5 ${hasUnread ? 'text-gray-700 font-medium' : 'text-gray-400'}`}>
+                                            <p className="text-sm truncate mt-0.5" style={{ color: hasUnread ? midText : dimText, fontWeight: hasUnread ? 500 : 400 }}>
                                                 {conv.last_message || 'No messages yet'}
                                             </p>
                                         </div>
@@ -195,23 +198,19 @@ export default function MessagesPage() {
             {!loading && tab === 'contacts' && (
                 <>
                     {contacts.length === 0 ? (
-                        <div
-                            style={{ ...G.medium, borderRadius: 24, position: 'relative', overflow: 'hidden' }}
-                            className="p-10 text-center space-y-3"
-                        >
+                        <div style={{ ...G.medium, borderRadius: 24, position: 'relative', overflow: 'hidden' }} className="p-10 text-center space-y-3">
                             <Iris />
-                            <div className="text-4xl">🔗</div>
-                            <p className="font-bold text-gray-800">No mutual syncs yet</p>
-                            <p className="text-sm text-gray-500">
-                                Find people on the <strong>Search</strong> page and sync with each other — then you can message.
+                            <Specular />
+                            <p className="font-bold" style={{ color: brightText }}>No mutual syncs yet</p>
+                            <p className="text-sm" style={{ color: dimText }}>
+                                Find people on the <strong style={{ color: midText }}>Search</strong> page and sync with each other — then you can message.
                             </p>
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {/* Existing conversations at top */}
                             {conversations.length > 0 && (
                                 <>
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-1">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest px-1" style={{ color: dimText }}>
                                         Continue conversation
                                     </p>
                                     {conversations.map(conv => (
@@ -223,19 +222,18 @@ export default function MessagesPage() {
                                         >
                                             <AvatarBubble src={conv.avatar} name={conv.username} size={44} />
                                             <div className="flex-1 min-w-0">
-                                                <p className="font-bold text-gray-800 truncate">{conv.username}</p>
-                                                <p className="text-xs text-gray-400 truncate">{conv.last_message}</p>
+                                                <p className="font-bold truncate" style={{ color: brightText }}>{conv.username}</p>
+                                                <p className="text-xs truncate" style={{ color: dimText }}>{conv.last_message}</p>
                                             </div>
-                                            <span className="text-xs text-primary font-bold">Open →</span>
+                                            <span className="text-xs font-bold" style={{ color: midText }}>Open →</span>
                                         </div>
                                     ))}
                                 </>
                             )}
 
-                            {/* New contacts */}
                             {freshContacts.length > 0 && (
                                 <>
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-1 mt-4">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest px-1 mt-4" style={{ color: dimText }}>
                                         Start a new chat
                                     </p>
                                     {freshContacts.map(c => (
@@ -247,10 +245,10 @@ export default function MessagesPage() {
                                         >
                                             <AvatarBubble src={c.avatar} name={c.username} size={44} />
                                             <div className="flex-1 min-w-0">
-                                                <p className="font-bold text-gray-800 truncate">{c.username}</p>
-                                                {c.bio && <p className="text-xs text-gray-400 truncate">{c.bio}</p>}
+                                                <p className="font-bold truncate" style={{ color: brightText }}>{c.username}</p>
+                                                {c.bio && <p className="text-xs truncate" style={{ color: dimText }}>{c.bio}</p>}
                                             </div>
-                                            <span className="text-xs text-primary font-bold">Message →</span>
+                                            <span className="text-xs font-bold" style={{ color: midText }}>Message →</span>
                                         </div>
                                     ))}
                                 </>

@@ -71,21 +71,27 @@ const Sidebar = () => {
         return (
             <div
                 className="flex flex-col h-full p-6"
-                style={{ ...G.nav, borderRight: '1px solid rgba(255,255,255,0.62)', position: 'relative', overflow: 'hidden' }}
+                style={{
+                    ...G.nav,
+                    borderRight: '1px solid rgba(255,255,255,0.08)',
+                    position: 'relative',
+                    overflow: 'hidden',
+                }}
             >
-                <Iris opacity={0.6} />
+                <Iris opacity={0.5} />
                 <Specular />
 
                 {/* Logo */}
                 <div className="flex items-center justify-center mb-10">
                     <Link href="/profile" onClick={() => setIsDrawerOpen(false)}
-                        className="font-black text-2xl text-primary tracking-tight">
+                        className="font-black text-2xl tracking-tight"
+                        style={{ color: 'rgba(255,255,255,0.85)' }}>
                         bucks
                     </Link>
                 </div>
 
                 {/* Nav */}
-                <nav className="flex-1 space-y-2">
+                <nav className="flex-1 space-y-1">
                     {navItems.map((item) => {
                         const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                         return (
@@ -95,11 +101,14 @@ const Sidebar = () => {
                                 onClick={() => setIsDrawerOpen(false)}
                                 className="flex items-center space-x-4 px-4 py-3 rounded-2xl transition-all duration-200 group active:scale-95"
                                 style={isActive ? {
-                                    background: 'linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)',
-                                    boxShadow: '0 4px 20px rgba(106,0,255,0.45), inset 0 1px 0 rgba(255,255,255,0.35)',
-                                    color: '#fff',
+                                    background: 'linear-gradient(145deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.06) 100%)',
+                                    backdropFilter: 'blur(16px)',
+                                    WebkitBackdropFilter: 'blur(16px)',
+                                    border: '1px solid rgba(255,255,255,0.16)',
+                                    boxShadow: '0 4px 20px rgba(0,0,0,0.35), inset 0 1.5px 0 rgba(255,255,255,0.20)',
+                                    color: 'rgba(255,255,255,0.95)',
                                 } : {
-                                    color: 'rgba(100,0,200,0.55)',
+                                    color: 'rgba(255,255,255,0.38)',
                                 }}
                             >
                                 <span className={`text-xl ${isActive ? 'scale-110' : 'group-hover:scale-110'} transition-transform`}>
@@ -109,11 +118,11 @@ const Sidebar = () => {
                                 {item.badge && (
                                     <span
                                         className="text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center"
-                                        style={
-                                            isActive
-                                                ? { background: 'rgba(255,255,255,0.3)', color: '#fff' }
-                                                : { background: 'linear-gradient(135deg,#9B3FFF,#6A00FF)', color: '#fff' }
-                                        }
+                                        style={{
+                                            background: 'rgba(255,255,255,0.18)',
+                                            color: 'rgba(255,255,255,0.90)',
+                                            border: '1px solid rgba(255,255,255,0.25)',
+                                        }}
                                     >
                                         {item.badge}
                                     </span>
@@ -130,29 +139,39 @@ const Sidebar = () => {
                         style={G.light}
                         onClick={() => { setIsDrawerOpen(false); router.push('/profile'); }}
                     >
-                        <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0"
-                            style={{ background: 'linear-gradient(135deg,#ede9fe,#ddd6fe)' }}>
+                        <div
+                            className="w-9 h-9 rounded-xl overflow-hidden shrink-0"
+                            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.10)' }}
+                        >
                             {identity.avatar
                                 ? <img src={identity.avatar} alt={identity.username} className="w-full h-full object-cover" />
-                                : <div className="w-full h-full flex items-center justify-center text-lg">👤</div>
+                                : <div className="w-full h-full flex items-center justify-center text-lg" style={{ color: 'rgba(255,255,255,0.5)' }}>◈</div>
                             }
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-gray-800 truncate">{identity.username}</p>
-                            <p className="text-[10px] text-gray-400 font-mono truncate">{identity.uuid7.split('-')[0]}</p>
+                            <p className="text-sm font-bold truncate" style={{ color: 'rgba(255,255,255,0.85)' }}>{identity.username}</p>
+                            <p className="text-[10px] font-mono truncate" style={{ color: 'rgba(255,255,255,0.35)' }}>{identity.uuid7.split('-')[0]}</p>
                         </div>
                     </div>
                 )}
 
                 {/* Footer */}
-                <div className="space-y-1 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.38)' }}>
+                <div className="space-y-1 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                     <Link href="/settings" onClick={() => setIsDrawerOpen(false)}
-                        className="flex items-center space-x-3 px-4 py-2 text-secondary hover:text-foreground hover:bg-gray-50 rounded-xl transition-colors">
+                        className="flex items-center space-x-3 px-4 py-2 rounded-xl transition-colors"
+                        style={{ color: 'rgba(255,255,255,0.35)' }}
+                        onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.65)')}
+                        onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.35)')}
+                    >
                         <FaGear className="text-xs" />
                         <span className="text-xs font-bold">Settings</span>
                     </Link>
                     <button onClick={handleLogout}
-                        className="w-full flex items-center space-x-3 px-4 py-2 text-red-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                        className="w-full flex items-center space-x-3 px-4 py-2 rounded-xl transition-colors"
+                        style={{ color: 'rgba(255,120,120,0.55)' }}
+                        onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,140,140,0.80)')}
+                        onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,120,120,0.55)')}
+                    >
                         <FaArrowRightFromBracket className="text-xs" />
                         <span className="text-xs font-bold">Logout</span>
                     </button>
@@ -167,11 +186,20 @@ const Sidebar = () => {
             <div className="md:hidden">
                 <button
                     onClick={() => setIsDrawerOpen(true)}
-                    className="fixed top-3 left-4 z-[100] p-2 rounded-xl text-gray-700 hover:text-primary bg-white hover:bg-gray-50 border border-gray-200 shadow-lg transition-all"
+                    className="fixed top-3 left-4 z-[100] p-2 rounded-xl transition-all relative"
+                    style={{
+                        background: 'rgba(255,255,255,0.07)',
+                        backdropFilter: 'blur(16px)',
+                        WebkitBackdropFilter: 'blur(16px)',
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        color: 'rgba(255,255,255,0.70)',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.40)',
+                    }}
                 >
                     <FaBars className="text-xl" />
                     {unread > 0 && (
-                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-white text-[9px] font-black flex items-center justify-center">
+                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center"
+                            style={{ background: 'rgba(255,255,255,0.20)', color: 'rgba(255,255,255,0.90)', border: '1px solid rgba(255,255,255,0.25)' }}>
                             {unread > 9 ? '9+' : unread}
                         </span>
                     )}
@@ -179,7 +207,7 @@ const Sidebar = () => {
 
                 {isDrawerOpen && (
                     <div className="fixed inset-0 z-[110]">
-                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsDrawerOpen(false)} />
+                        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsDrawerOpen(false)} />
                         <div className="absolute inset-y-0 left-0 w-72 shadow-2xl animate-in slide-in-from-left duration-300">
                             <SidebarContent />
                         </div>
