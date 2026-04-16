@@ -1,23 +1,55 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { FaMagnifyingGlass, FaUser, FaRegUser, FaGear, FaArrowRightFromBracket, FaBars } from 'react-icons/fa6';
+import {
+    FaMagnifyingGlass,
+    FaUser,
+    FaRegUser,
+    FaMessage,
+    FaRegMessage,
+    FaGear,
+    FaArrowRightFromBracket,
+    FaBars,
+} from 'react-icons/fa6';
 import { G, Iris, Specular } from '@/components/ui/Glass';
-import { getIdentity } from '@/lib/identity';
-import { clearIdentity } from '@/lib/identity';
+import { getIdentity, clearIdentity } from '@/lib/identity';
+import { fetchChatUnread } from '@/lib/api';
 
 const Sidebar = () => {
     const pathname = usePathname();
     const router = useRouter();
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+    const [unread, setUnread] = useState(0);
+
+    // Poll unread count every 30 seconds
+    useEffect(() => {
+        let cancelled = false;
+        const poll = async () => {
+            const count = await fetchChatUnread();
+            if (!cancelled) setUnread(count);
+        };
+        poll();
+        const id = setInterval(poll, 30000);
+        return () => {
+            cancelled = true;
+            clearInterval(id);
+        };
+    }, []);
 
     const navItems = [
         {
             label: 'Search',
             icon: <FaMagnifyingGlass />,
             href: '/search',
+        },
+        {
+            label: 'Messages',
+            icon: <FaRegMessage />,
+            activeIcon: <FaMessage />,
+            href: '/messages',
+            badge: unread > 0 ? (unread > 9 ? '9+' : String(unread)) : undefined,
         },
         {
             label: 'Profile',
@@ -73,7 +105,19 @@ const Sidebar = () => {
                                 <span className={`text-xl ${isActive ? 'scale-110' : 'group-hover:scale-110'} transition-transform`}>
                                     {isActive && item.activeIcon ? item.activeIcon : item.icon}
                                 </span>
-                                <span className="font-bold text-sm">{item.label}</span>
+                                <span className="font-bold text-sm flex-1">{item.label}</span>
+                                {item.badge && (
+                                    <span
+                                        className="text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center"
+                                        style={
+                                            isActive
+                                                ? { background: 'rgba(255,255,255,0.3)', color: '#fff' }
+                                                : { background: 'linear-gradient(135deg,#9B3FFF,#6A00FF)', color: '#fff' }
+                                        }
+                                    >
+                                        {item.badge}
+                                    </span>
+                                )}
                             </Link>
                         );
                     })}
@@ -126,6 +170,11 @@ const Sidebar = () => {
                     className="fixed top-3 left-4 z-[100] p-2 rounded-xl text-gray-700 hover:text-primary bg-white hover:bg-gray-50 border border-gray-200 shadow-lg transition-all"
                 >
                     <FaBars className="text-xl" />
+                    {unread > 0 && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-white text-[9px] font-black flex items-center justify-center">
+                            {unread > 9 ? '9+' : unread}
+                        </span>
+                    )}
                 </button>
 
                 {isDrawerOpen && (

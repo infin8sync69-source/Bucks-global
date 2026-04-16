@@ -66,7 +66,7 @@ const signRequest = async (
     }
 };
 
-// Inject X-DID header and signature for every request
+// Inject X-DID, X-UUID7 headers and signature for every request
 api.interceptors.request.use(async (config) => {
     if (typeof window !== 'undefined') {
         const did = localStorage.getItem('bucks_peer_id');
@@ -88,6 +88,19 @@ api.interceptors.request.use(async (config) => {
                     config.headers['X-Timestamp'] = timestamp;
                 }
             }
+        }
+
+        // Inject UUID7 from identity store
+        try {
+            const raw = localStorage.getItem('bucks_identity_v2');
+            if (raw) {
+                const identity = JSON.parse(raw);
+                if (identity?.uuid7) {
+                    config.headers['X-UUID7'] = identity.uuid7;
+                }
+            }
+        } catch {
+            // ignore parse errors
         }
     }
     return config;
@@ -474,6 +487,64 @@ export const getUserConnections = async (uuid7: string) => {
         `/users/${uuid7}/connections`
     );
     return response.data;
+};
+
+// ─── Chat (UUID7-based, mutual-sync gated) ───────────────────────────────────
+
+export interface ChatContact {
+    uuid7: string;
+    username: string;
+    avatar: string;
+    bio: string;
+}
+
+export interface ChatConversation {
+    peer_uuid7: string;
+    username: string;
+    avatar: string;
+    last_message: string;
+    timestamp: string;
+    unread_count: number;
+}
+
+export interface ChatMessage {
+    sender: string;
+    receiver: string;
+    text: string;
+    timestamp: string;
+    is_read: number;
+}
+
+export const fetchChatUnread = async (): Promise<number> => {
+    try {
+        const res = await api.get<{ unread: number }>('/chat/unread');
+        return res.data.unread ?? 0;
+    } catch {
+        return 0;
+    }
+};
+
+export const fetchChatContacts = async (): Promise<ChatContact[]> => {
+    const res = await api.get<{ contacts: ChatContact[] }>('/chat/contacts');
+    return res.data.contacts ?? [];
+};
+
+export const fetchChatConversations = async (): Promise<ChatConversation[]> => {
+    const res = await api.get<{ conversations: ChatConversation[] }>('/chat/conversations');
+    return res.data.conversations ?? [];
+};
+
+export const fetchChatHistory = async (peerUuid7: string): Promise<ChatMessage[]> => {
+    const res = await api.get<{ history: ChatMessage[] }>(`/chat/${peerUuid7}`);
+    return res.data.history ?? [];
+};
+
+export const sendChatMessage = async (peerUuid7: string, text: string) => {
+    const res = await api.post<{ success: boolean; timestamp: string }>(
+        `/chat/${peerUuid7}/send`,
+        { text },
+    );
+    return res.data;
 };
 
 export default api;

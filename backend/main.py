@@ -2596,6 +2596,188 @@ async def approve_recovery(request_id: str = Form(...), guardian_peer_id: str = 
     conn.close()
     return {"success": True, "status": status}
 
+# ==================== Chat System (UUID7-based, mutual-sync gated) ====================
+
+def get_chat_uuid7(request: Request) -> str:
+    """Extract the caller's UUID7 from the X-UUID7 header."""
+    return request.headers.get("X-UUID7", "").strip()
+
+def check_mutual_sync(conn, my_uuid7: str, peer_uuid7: str) -> bool:
+    """Return True only when BOTH users have synced each other."""
+    a = conn.execute(
+        "SELECT 1 FROM connections WHERE from_uuid7 = ? AND to_uuid7 = ?",
+        (my_uuid7, peer_uuid7),
+    ).fetchone()
+    b = conn.execute(
+        "SELECT 1 FROM connections WHERE from_uuid7 = ? AND to_uuid7 = ?",
+        (peer_uuid7, my_uuid7),
+    ).fetchone()
+    return bool(a and b)
+
+
+@app.get("/api/chat/unread")
+async def chat_unread_count(request: Request):
+    """Return total unread message count for the sidebar badge."""
+    my_uuid7 = get_chat_uuid7(request)
+    if not my_uuid7:
+        return {"unread": 0}
+    conn = get_db_connection()
+    row = conn.execute(
+        "SELECT COUNT(*) as count FROM messages WHERE receiver_peer_id = ? AND is_read = 0",
+        (my_uuid7,),
+    ).fetchone()
+    conn.close()
+    return {"unread": int(row["count"]) if row else 0}
+
+
+@app.get("/api/chat/contacts")
+async def chat_contacts(request: Request):
+    """Return all users who have mutually synced with me (eligible to chat)."""
+    my_uuid7 = get_chat_uuid7(request)
+    if not my_uuid7:
+        return {"contacts": []}
+    conn = get_db_connection()
+    rows = conn.execute(
+        """
+        SELECT u.uuid7, u.username, u.avatar, u.bio
+        FROM connections c1
+        JOIN connections c2
+          ON c1.to_uuid7   = c2.from_uuid7
+         AND c2.to_uuid7   = c1.from_uuid7
+        JOIN users u ON u.uuid7 = c1.to_uuid7
+        WHERE c1.from_uuid7 = ?
+        """,
+        (my_uuid7,),
+    ).fetchall()
+    conn.close()
+    return {"contacts": [dict(r) for r in rows]}
+
+
+@app.get("/api/chat/conversations")
+async def chat_conversations(request: Request):
+    """Return conversations list with last message and unread count."""
+    my_uuid7 = get_chat_uuid7(request)
+    if not my_uuid7:
+        return {"conversations": []}
+    conn = get_db_connection()
+
+    # Fetch all messages involving me, newest first
+    rows = conn.execute(
+        """
+        SELECT sender_peer_id, receiver_peer_id, text, timestamp, is_read
+        FROM messages
+        WHERE sender_peer_id = ? OR receiver_peer_id = ?
+        ORDER BY timestamp DESC
+        """,
+        (my_uuid7, my_uuid7),
+    ).fetchall()
+
+    # Group by conversation partner in Python
+    seen: dict = {}
+    for r in rows:
+        r = dict(r)
+        peer = (
+            r["receiver_peer_id"]
+            if r["sender_peer_id"] == my_uuid7
+            else r["sender_peer_id"]
+        )
+        if peer not in seen:
+            seen[peer] = {
+                "peer_uuid7": peer,
+                "last_message": r["text"] or "",
+                "timestamp": r["timestamp"],
+                "unread_count": 0,
+            }
+        # Count unread incoming messages
+        if r["receiver_peer_id"] == my_uuid7 and not r["is_read"]:
+            seen[peer]["unread_count"] += 1
+
+    # Enrich with user info
+    conversations = []
+    for peer_uuid7, conv in seen.items():
+        user = conn.execute(
+            "SELECT username, avatar FROM users WHERE uuid7 = ?", (peer_uuid7,)
+        ).fetchone()
+        conv["username"] = user["username"] if user else f"User {peer_uuid7[:8]}"
+        conv["avatar"] = user["avatar"] if user else ""
+        conversations.append(conv)
+
+    conn.close()
+    return {"conversations": conversations}
+
+
+@app.get("/api/chat/{peer_uuid7}")
+async def chat_history(peer_uuid7: str, request: Request):
+    """Get message history with a specific user. Mutual sync required."""
+    my_uuid7 = get_chat_uuid7(request)
+    if not my_uuid7:
+        raise HTTPException(status_code=401, detail="X-UUID7 header required")
+
+    conn = get_db_connection()
+
+    if not check_mutual_sync(conn, my_uuid7, peer_uuid7):
+        conn.close()
+        raise HTTPException(status_code=403, detail="Not mutually synced with this user")
+
+    rows = conn.execute(
+        """
+        SELECT sender_peer_id as sender, receiver_peer_id as receiver,
+               text, timestamp, is_read
+        FROM messages
+        WHERE (sender_peer_id = ? AND receiver_peer_id = ?)
+           OR (sender_peer_id = ? AND receiver_peer_id = ?)
+        ORDER BY timestamp ASC
+        """,
+        (my_uuid7, peer_uuid7, peer_uuid7, my_uuid7),
+    ).fetchall()
+
+    # Mark incoming messages as read
+    conn.execute(
+        "UPDATE messages SET is_read = 1 WHERE receiver_peer_id = ? AND sender_peer_id = ?",
+        (my_uuid7, peer_uuid7),
+    )
+    conn.commit()
+
+    history = [dict(r) for r in rows]
+    conn.close()
+    return {"history": history}
+
+
+class ChatMessageBody(BaseModel):
+    text: str
+
+
+@app.post("/api/chat/{peer_uuid7}/send")
+async def chat_send(peer_uuid7: str, body: ChatMessageBody, request: Request):
+    """Send a text message. Mutual sync required."""
+    my_uuid7 = get_chat_uuid7(request)
+    if not my_uuid7:
+        raise HTTPException(status_code=401, detail="X-UUID7 header required")
+
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    conn = get_db_connection()
+
+    if not check_mutual_sync(conn, my_uuid7, peer_uuid7):
+        conn.close()
+        raise HTTPException(status_code=403, detail="Not mutually synced with this user")
+
+    timestamp = datetime.now().isoformat()
+    conn.execute(
+        """
+        INSERT INTO messages (sender_peer_id, receiver_peer_id, text, timestamp, is_read)
+        VALUES (?, ?, ?, ?, 0)
+        """,
+        (my_uuid7, peer_uuid7, text, timestamp),
+    )
+    conn.commit()
+    conn.close()
+
+    return {"success": True, "timestamp": timestamp}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

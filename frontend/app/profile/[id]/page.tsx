@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { FaArrowLeft, FaRotate, FaCheck, FaUserMinus, FaLink } from 'react-icons/fa6';
+import { FaArrowLeft, FaRotate, FaCheck, FaUserMinus, FaLink, FaMessage } from 'react-icons/fa6';
 import { G, Iris, Specular, PurpleButton } from '@/components/ui/Glass';
 import { getIdentity, addConnection, removeConnection, isSynced, type Connection } from '@/lib/identity';
 import { shortUUID } from '@/lib/uuid7';
@@ -46,6 +46,7 @@ export default function UserProfilePage() {
     const [synced, setSynced] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [isOwnProfile, setIsOwnProfile] = useState(false);
+    const [theySync, setTheySync] = useState(false); // they have synced me back → mutual
 
     useEffect(() => {
         if (!uuid7Param) return;
@@ -87,6 +88,22 @@ export default function UserProfilePage() {
             .catch(() => {
                 if (!cached) setLoadState('not_found');
             });
+
+        // 3. Check if they have also synced back (mutual sync check)
+        {
+            const me = getIdentity();
+            if (me?.uuid7) {
+                const meUuid7 = me.uuid7;
+                api.get<{ connections: any[] }>(`/users/${uuid7Param}/connections`)
+                    .then(res => {
+                        const mutual = (res.data.connections ?? []).some(
+                            (c: any) => c.uuid7 === meUuid7,
+                        );
+                        setTheySync(mutual);
+                    })
+                    .catch(() => {});
+            }
+        }
     }, [uuid7Param]);
 
     const handleSync = async () => {
@@ -208,6 +225,19 @@ export default function UserProfilePage() {
                             >
                                 <FaLink className="text-[10px]" /> Share
                             </button>
+                            {/* Message button — only for mutual syncs */}
+                            {!isOwnProfile && synced && theySync && (
+                                <button
+                                    onClick={() => router.push(`/messages/${user.uuid7}`)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90"
+                                    style={{
+                                        background: 'linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)',
+                                        boxShadow: '0 3px 10px rgba(106,0,255,0.3)',
+                                    }}
+                                >
+                                    <FaMessage className="text-[10px]" /> Message
+                                </button>
+                            )}
                         </div>
 
                         {isOwnProfile && (
