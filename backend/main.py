@@ -445,23 +445,51 @@ class CreateUserReq(BaseModel):
 
 @app.post("/api/users")
 async def create_user(body: CreateUserReq):
-    """Register or update a user profile by DID + UUID7."""
+    """Register or update a user profile by DID + UUID7.
+
+    Handles three conflict scenarios:
+    1. Same peer_id (DID) — update existing row.
+    2. Same uuid7 but different DID — update that row (re-registration from new key file edge-case).
+    3. Brand new user — insert.
+    Also truncates avatar to 64 KB to prevent oversized payloads.
+    """
+    # Truncate avatar to 64 KB to keep the DB row manageable
+    AVATAR_LIMIT = 64 * 1024
+    avatar = (body.avatar or "")[:AVATAR_LIMIT]
+
     conn = get_db_connection()
     try:
-        conn.execute(
-            """
-            INSERT INTO users (peer_id, did, uuid7, username, handle, avatar, bio)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(peer_id) DO UPDATE SET
-                uuid7      = excluded.uuid7,
-                username   = excluded.username,
-                handle     = excluded.handle,
-                avatar     = excluded.avatar,
-                bio        = excluded.bio
-            """,
-            (body.did, body.did, body.uuid7, body.username,
-             f"@{body.username.lower()}", body.avatar, body.bio),
-        )
+        # Check if uuid7 already exists under a different peer_id
+        existing_by_uuid7 = conn.execute(
+            "SELECT peer_id FROM users WHERE uuid7 = ?", (body.uuid7,)
+        ).fetchone()
+
+        if existing_by_uuid7 and existing_by_uuid7["peer_id"] != body.did:
+            # Update the row keyed by uuid7 (user regenerated their DID)
+            conn.execute(
+                """
+                UPDATE users SET peer_id = ?, did = ?, username = ?, handle = ?, avatar = ?, bio = ?
+                WHERE uuid7 = ?
+                """,
+                (body.did, body.did, body.username,
+                 f"@{body.username.lower()}", avatar, body.bio, body.uuid7),
+            )
+        else:
+            # Normal upsert by peer_id (DID)
+            conn.execute(
+                """
+                INSERT INTO users (peer_id, did, uuid7, username, handle, avatar, bio)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(peer_id) DO UPDATE SET
+                    uuid7      = excluded.uuid7,
+                    username   = excluded.username,
+                    handle     = excluded.handle,
+                    avatar     = excluded.avatar,
+                    bio        = excluded.bio
+                """,
+                (body.did, body.did, body.uuid7, body.username,
+                 f"@{body.username.lower()}", avatar, body.bio),
+            )
         conn.commit()
     except Exception as e:
         conn.close()

@@ -12,6 +12,7 @@ import { shortUUID } from '@/lib/uuid7';
 import { compressAvatar } from '@/lib/imageUtils';
 import { useToast } from '@/components/Toast';
 import api from '@/lib/api';
+import { ensureRegistered } from '@/lib/sync';
 
 type Step = 'choose' | 'generated' | 'profile';
 
@@ -99,14 +100,14 @@ export default function LoginPage() {
             };
             saveIdentity(profile);
 
-            // Register with backend (fire-and-forget)
-            api.post('/users', {
-                did: profile.did,
-                uuid7: profile.uuid7,
-                username: profile.username,
-                avatar: profile.avatar,
-                bio: profile.bio,
-            }).catch(() => { });
+            // Register with backend — retry up to 3× so the user is discoverable
+            const ok = await ensureRegistered(profile);
+            if (!ok) {
+                showToast(
+                    'Profile saved locally. Could not reach the server — you may not appear in search until your device reconnects.',
+                    'info',
+                );
+            }
 
             router.push('/profile');
         } finally {
@@ -119,7 +120,7 @@ export default function LoginPage() {
         const file = e.target.files?.[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = (ev) => {
+        reader.onload = async (ev) => {
             try {
                 const parsed = JSON.parse(ev.target?.result as string);
                 if (!parsed.did || !parsed.secret) { showToast('Invalid identity file.', 'error'); return; }
@@ -128,14 +129,19 @@ export default function LoginPage() {
                     const tsHex = ms.toString(16).padStart(12, '0');
                     return `${tsHex.slice(0, 8)}-${tsHex.slice(8, 12)}-7000-8000-000000000000`;
                 })();
-                saveIdentity({
+                const imported = {
                     did: parsed.did, uuid7,
                     secret: parsed.secret,
                     username: parsed.username || `User_${shortUUID(uuid7)}`,
                     avatar: parsed.avatar || '',
                     bio: parsed.bio || '',
                     createdAt: parsed.createdAt || new Date().toISOString(),
-                });
+                };
+                saveIdentity(imported);
+
+                // Re-register with backend so this device shows up in search
+                ensureRegistered(imported).catch(() => {});
+
                 showToast('Identity restored!', 'success');
                 router.push('/profile');
             } catch { showToast('Could not read file.', 'error'); }

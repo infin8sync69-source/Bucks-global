@@ -8,6 +8,7 @@ import { getIdentity, addConnection, removeConnection, isSynced, type Connection
 import { shortUUID } from '@/lib/uuid7';
 import { useToast } from '@/components/Toast';
 import api from '@/lib/api';
+import { pushSyncToBackend } from '@/lib/sync';
 
 function AvatarImg({ src, size = 96 }: { src: string; size?: number }) {
     if (src) {
@@ -129,8 +130,8 @@ export default function UserProfilePage() {
                 addConnection(conn);
                 setSynced(true);
                 showToast(`Synced with ${user.username}! 🔗`, 'success');
-                if (myIdentity) {
-                    api.post(`/users/${user.uuid7}/sync`, { from_uuid7: myIdentity.uuid7 }).catch(() => { });
+                if (myIdentity?.uuid7) {
+                    pushSyncToBackend(myIdentity.uuid7, user.uuid7);
                 }
             }
         } finally {

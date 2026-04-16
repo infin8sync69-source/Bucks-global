@@ -8,6 +8,7 @@ import { getIdentity, getConnections, addConnection, isSynced, type Connection }
 import { shortUUID } from '@/lib/uuid7';
 import { useToast } from '@/components/Toast';
 import api from '@/lib/api';
+import { pushSyncToBackend } from '@/lib/sync';
 
 interface UserResult {
     uuid7: string;
@@ -73,6 +74,7 @@ export default function SearchPage() {
     const [results, setResults] = useState<UserResult[]>([]);
     const [loading, setLoading] = useState(false);
     const [searched, setSearched] = useState(false);
+    const [backendOk, setBackendOk] = useState(true);
     const [, forceUpdate] = useState(0); // re-render after sync
 
     // Auto-focus on mount
@@ -116,18 +118,31 @@ export default function SearchPage() {
 
         setResults(localResults);
 
-        // 3. Fetch from backend
+        // 3. Fetch from backend — also try exact uuid7 lookup for full-UUID paste
         try {
             const res = await api.get<{ users: UserResult[] }>(`/users?q=${encodeURIComponent(q)}&limit=30`);
             const remote = res.data.users ?? [];
+            setBackendOk(true);
+
+            // Also try direct lookup by uuid7 (handles exact paste of full UUID)
+            let directHit: UserResult | null = null;
+            const looksLikeUuid = /^[0-9a-f-]{8,}/i.test(q.trim());
+            if (looksLikeUuid && !remote.find(r => r.uuid7 === q.trim())) {
+                try {
+                    const direct = await api.get<UserResult>(`/users/${q.trim()}`);
+                    directHit = direct.data;
+                } catch { /* not found — ignore */ }
+            }
+
             // Merge: remote takes precedence, deduplicate by uuid7
             const merged = [...localResults];
-            remote.forEach(r => {
-                if (!merged.find(m => m.uuid7 === r.uuid7)) merged.push(r);
+            [...remote, ...(directHit ? [directHit] : [])].forEach(r => {
+                if (r.uuid7 && !merged.find(m => m.uuid7 === r.uuid7)) merged.push(r);
             });
             setResults(merged);
         } catch {
-            // Backend offline — show local results only
+            setBackendOk(false);
+            // Backend offline — local results already set above
         } finally {
             setLoading(false);
         }
@@ -145,8 +160,9 @@ export default function SearchPage() {
         addConnection(conn);
         showToast(`Synced with ${user.username}! 🔗`, 'success');
 
-        if (me) {
-            api.post(`/users/${user.uuid7}/sync`, { from_uuid7: me.uuid7 }).catch(() => { });
+        // Push to backend with retry so the other device can see it
+        if (me?.uuid7) {
+            pushSyncToBackend(me.uuid7, user.uuid7);
         }
 
         forceUpdate(n => n + 1);
@@ -167,6 +183,16 @@ export default function SearchPage() {
                 <h1 className="text-2xl font-black text-gray-900">Find People</h1>
                 <p className="text-sm text-gray-500 mt-1">Search by name or paste a UUID</p>
             </div>
+
+            {/* ── Backend offline warning ── */}
+            {searched && !backendOk && (
+                <div className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700">
+                    <span className="text-base shrink-0">⚠️</span>
+                    <span>
+                        <strong>Showing local results only.</strong> The server is unreachable — other users won't appear until the connection is restored. Make sure your device is connected to the internet and the backend is running.
+                    </span>
+                </div>
+            )}
 
             {/* ── Search bar ── */}
             <div

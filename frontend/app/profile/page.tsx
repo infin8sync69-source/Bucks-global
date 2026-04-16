@@ -9,6 +9,7 @@ import { shortUUID } from '@/lib/uuid7';
 import { compressAvatar } from '@/lib/imageUtils';
 import { useToast } from '@/components/Toast';
 import api from '@/lib/api';
+import { ensureRegistered, restoreConnectionsFromBackend } from '@/lib/sync';
 
 function AvatarDisplay({ src, size = 80 }: { src: string; size?: number }) {
     if (src) {
@@ -55,6 +56,11 @@ export default function OwnProfilePage() {
         setEditName(id.username);
         setEditBio(id.bio);
         setEditPhoto(id.avatar);
+
+        // Restore any connections recorded on other devices
+        restoreConnectionsFromBackend(id.uuid7)
+            .then(() => setConnections(getConnections()))
+            .catch(() => {});
     }, [router]);
 
     if (!identity) return null;
@@ -83,23 +89,19 @@ export default function OwnProfilePage() {
         }
     };
 
-    const saveEdit = () => {
+    const saveEdit = async () => {
         const patch = { username: editName.trim() || identity.username, bio: editBio.trim(), avatar: editPhoto };
         updateIdentity(patch);
         const updated = { ...identity, ...patch };
         setIdentity(updated);
-
-        // Sync to backend
-        api.post('/users', {
-            did: identity.did,
-            uuid7: identity.uuid7,
-            username: patch.username,
-            avatar: patch.avatar,
-            bio: patch.bio,
-        }).catch(() => { });
-
         setEditing(false);
         showToast('Profile updated!', 'success');
+
+        // Sync to backend with retry
+        const ok = await ensureRegistered({ ...identity, ...patch });
+        if (!ok) {
+            showToast('Changes saved locally. Backend sync failed — will retry next time.', 'info');
+        }
     };
 
     const handleLogout = () => {
