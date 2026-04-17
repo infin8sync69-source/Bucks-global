@@ -22,11 +22,15 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
                 // on every startup so they're always discoverable via search.
                 try {
                     const { getIdentity } = await import('@/lib/identity');
-                    const { ensureRegistered } = await import('@/lib/sync');
+                    const { ensureRegistered, restoreConnectionsFromBackend } = await import('@/lib/sync');
                     const identity = getIdentity();
                     if (identity?.uuid7) {
                         // fire-and-forget — don't block rendering
-                        ensureRegistered(identity).catch(() => {});
+                        // After registration confirmed, restore any connections synced
+                        // from other devices so this device is immediately up-to-date
+                        ensureRegistered(identity).then(ok => {
+                            if (ok) restoreConnectionsFromBackend(identity.uuid7).catch(() => {});
+                        }).catch(() => {});
                     }
                 } catch {
                     // never break auth over a registration failure

@@ -335,11 +335,14 @@ def init_db():
                 uuid7 TEXT
             );
         """)
+        # ── Migrations: ADD COLUMN before CREATE INDEX (existing tables skip CREATE TABLE) ──
+        for col, coltype in [("secret_key", "TEXT"), ("dag_root", "TEXT"), ("uuid7", "TEXT")]:
+            try:
+                c.execute(f"ALTER TABLE users ADD COLUMN {col} {coltype}")
+                conn.commit()  # commit each migration so subsequent ones see the column
+            except Exception:
+                pass  # column already exists — fine
         c.execute("CREATE INDEX IF NOT EXISTS idx_users_uuid7 ON users(uuid7);")
-        try:
-            c.execute("ALTER TABLE users ADD COLUMN uuid7 TEXT")
-        except Exception:
-            pass
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS connections (

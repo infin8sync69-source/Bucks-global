@@ -515,14 +515,14 @@ async def list_users(limit: int = 50, offset: int = 0, q: str = ""):
             """
             SELECT peer_id, did, uuid7, username, handle, avatar, bio
             FROM users
-            WHERE lower(username) LIKE ? OR uuid7 LIKE ?
+            WHERE lower(username) LIKE ? OR lower(uuid7) LIKE ?
             ORDER BY username
             LIMIT ? OFFSET ?
             """,
             (wildcard, wildcard, limit, offset),
         ).fetchall()
         total_row = conn.execute(
-            "SELECT COUNT(*) FROM users WHERE lower(username) LIKE ? OR uuid7 LIKE ?",
+            "SELECT COUNT(*) FROM users WHERE lower(username) LIKE ? OR lower(uuid7) LIKE ?",
             (wildcard, wildcard),
         ).fetchone()
     else:
@@ -541,7 +541,7 @@ async def get_user_by_uuid7(uuid7: str):
     """Get a user profile by their UUID7."""
     conn = get_db_connection()
     row = conn.execute(
-        "SELECT peer_id, did, uuid7, username, handle, avatar, bio FROM users WHERE uuid7 = ?",
+        "SELECT peer_id, did, uuid7, username, handle, avatar, bio FROM users WHERE lower(uuid7) = lower(?)",
         (uuid7,),
     ).fetchone()
     conn.close()
