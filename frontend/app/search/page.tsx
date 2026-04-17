@@ -96,7 +96,7 @@ export default function SearchPage() {
     const [results, setResults] = useState<UserResult[]>([]);
     const [loading, setLoading] = useState(false);
     const [searched, setSearched] = useState(false);
-    const [backendOk, setBackendOk] = useState(true);
+    const [backendOk, setBackendOk] = useState<boolean | null>(null); // null = not yet checked
     const [, forceUpdate] = useState(0);
 
     useEffect(() => {
@@ -107,6 +107,7 @@ export default function SearchPage() {
         if (!query.trim()) {
             setResults([]);
             setSearched(false);
+            setBackendOk(null);
             return;
         }
         const timer = setTimeout(() => performSearch(query.trim()), 350);
@@ -117,6 +118,7 @@ export default function SearchPage() {
         setLoading(true);
         setSearched(true);
 
+        // ── 1. Instant local results (own identity + synced connections) ──────
         const localResults: UserResult[] = [];
 
         const me = getIdentity();
@@ -135,18 +137,20 @@ export default function SearchPage() {
 
         setResults(localResults);
 
-        try {
+        // ── 2. Backend search (with 1 automatic retry on failure) ────────────
+        const doBackendSearch = async (): Promise<void> => {
             const res = await api.get<{ users: UserResult[] }>(`/users?q=${encodeURIComponent(q)}&limit=30`);
             const remote = res.data.users ?? [];
             setBackendOk(true);
 
+            // Also try direct uuid7 lookup for exact-paste scenarios
             let directHit: UserResult | null = null;
             const looksLikeUuid = /^[0-9a-f-]{8,}/i.test(q.trim());
             if (looksLikeUuid && !remote.find(r => r.uuid7 === q.trim())) {
                 try {
                     const direct = await api.get<UserResult>(`/users/${q.trim()}`);
                     directHit = direct.data;
-                } catch { /* not found */ }
+                } catch { /* 404 — not found, that's fine */ }
             }
 
             const merged = [...localResults];
@@ -154,8 +158,20 @@ export default function SearchPage() {
                 if (r.uuid7 && !merged.find(m => m.uuid7 === r.uuid7)) merged.push(r);
             });
             setResults(merged);
-        } catch {
-            setBackendOk(false);
+        };
+
+        try {
+            await doBackendSearch();
+        } catch (firstErr: any) {
+            // One automatic retry after 1.5 s (handles cold-start delays)
+            try {
+                await new Promise(r => setTimeout(r, 1500));
+                await doBackendSearch();
+            } catch (err: any) {
+                console.warn('[Search] Backend unreachable:', err?.message ?? err);
+                setBackendOk(false);
+                // Keep local results visible even when backend is offline
+            }
         } finally {
             setLoading(false);
         }

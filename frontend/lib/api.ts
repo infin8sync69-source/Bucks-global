@@ -1,28 +1,33 @@
 import axios from 'axios';
 
-// Helper to get the correct hostname for the local network (LAN)
-const getHost = () => {
-    if (typeof window !== 'undefined') {
-        return window.location.hostname;
-    }
-    return 'localhost';
-};
-
 const normalizeBaseUrl = (url: string) => url.replace(/\/+$/, '');
 
+/**
+ * Returns the API base URL.
+ *
+ * In the browser we ALWAYS use the Next.js server-side proxy (/api/proxy).
+ * This eliminates CORS entirely and makes the app work when accessed from
+ * another device (phone, another laptop) because the Next.js server — not
+ * the browser — makes the actual request to the backend.
+ *
+ * On the server side (SSR / API routes) we call the backend directly using
+ * NEXT_PUBLIC_API_URL (falls back to localhost:8000 for local dev).
+ */
 export const getApiBaseUrl = () => {
-    const configured = process.env.NEXT_PUBLIC_API_URL;
-    if (configured) {
-        const base = normalizeBaseUrl(configured);
-        return base.endsWith('/api') ? base : `${base}/api`;
+    if (typeof window !== 'undefined') {
+        // Browser: always go through the Next.js proxy — no CORS, cross-device safe
+        return '/api/proxy';
     }
-    return `http://${getHost()}:8000/api`;
+    // Server-side: direct connection to backend
+    const configured = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const base = normalizeBaseUrl(configured);
+    return base.endsWith('/api') ? base : `${base}/api`;
 };
 
-// API Client configuration
+// API Client — 20 s timeout (backend can be slow on first cold start)
 export const api = axios.create({
     baseURL: getApiBaseUrl(),
-    timeout: 10000,
+    timeout: 20000,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -420,7 +425,7 @@ export const getIPFSUrl = (cid: string) => {
     if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
         return `https://ipfs.io/ipfs/${cid}`;
     }
-    return `http://${getHost()}:8080/ipfs/${cid}`;
+    return `http://localhost:8080/ipfs/${cid}`;
 };
 
 // ─── Search / Agent ───────────────────────────────────────────────────────────
