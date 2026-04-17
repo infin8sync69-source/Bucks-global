@@ -16,7 +16,23 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
             if (did && auth) {
                 setIsAuthenticated(true);
 
-                // Only check onboarding if not already on settings/onboarding
+                // ── Auto re-register with backend ──────────────────────────────
+                // If the backend was offline when the user first signed up, their
+                // profile never made it into the database.  We silently re-register
+                // on every startup so they're always discoverable via search.
+                try {
+                    const { getIdentity } = await import('@/lib/identity');
+                    const { ensureRegistered } = await import('@/lib/sync');
+                    const identity = getIdentity();
+                    if (identity?.uuid7) {
+                        // fire-and-forget — don't block rendering
+                        ensureRegistered(identity).catch(() => {});
+                    }
+                } catch {
+                    // never break auth over a registration failure
+                }
+
+                // ── Onboarding redirect (legacy v1 profiles) ───────────────────
                 if (pathname !== '/settings' && pathname !== '/login') {
                     try {
                         const { fetchProfile } = await import('@/lib/api');
@@ -24,11 +40,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
                         if (profile.onboarding) {
                             router.push('/settings?onboarding=true');
                         }
-                    } catch (err: any) {
-                        // Network errors mean backend is offline — not an auth failure, skip silently
-                        if (err?.code !== 'ERR_NETWORK' && err?.message !== 'Network Error') {
-                            console.error('Failed to fetch profile during auth check', err);
-                        }
+                    } catch {
+                        // Backend offline — not an auth failure, skip silently
                     }
                 }
             } else {
@@ -45,11 +58,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         return () => window.removeEventListener('storage', checkAuth);
     }, [pathname, router]);
 
-    // Show nothing or a loader while checking
     if (isAuthenticated === null) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-white">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <div className="min-h-screen flex items-center justify-center" style={{ background: '#080810' }}>
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-white/10 border-t-white/40"></div>
             </div>
         );
     }

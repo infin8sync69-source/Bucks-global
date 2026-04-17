@@ -77,44 +77,48 @@ async def startup_event():
     """Initialize services on startup."""
     global p2p_client, rpc_client, social_dag, discovery_hub
 
-    # ── 1. Database ──────────────────────────────────────────────────────────
+    # ── 1. Database (fast path — 10 s connect timeout set in database.py) ────
     try:
         init_db()
     except Exception as e:
         print(f"⚠️  Database init failed: {e}")
         # Non-fatal — some endpoints will fail but server stays up
 
-    # ── 2. IPFS RPC client (used for content operations) ─────────────────────
-    rpc_host = os.getenv("IPFS_RPC_HOST", "http://127.0.0.1")
-    rpc_port = _env_int("IPFS_RPC_PORT", 5001)
-    try:
-        rpc_client = IPFSRPCClient(host=rpc_host, port=rpc_port)
-        social_dag = SocialDAG(rpc_client)
-        discovery_hub = DiscoveryHub(rpc_client, social_dag, get_db_connection)
-        print(f"✅ IPFS RPC client ready at {rpc_host}:{rpc_port}")
-    except Exception as e:
-        print(f"⚠️  IPFS RPC init failed (uploads/IPNS will be unavailable): {e}")
+    # ── 2. IPFS / P2P (deferred to background so healthcheck passes fast) ────
+    async def _start_ipfs():
+        global p2p_client, rpc_client, social_dag, discovery_hub
+        rpc_host = os.getenv("IPFS_RPC_HOST", "http://127.0.0.1")
+        rpc_port = _env_int("IPFS_RPC_PORT", 5001)
+        try:
+            rpc_client = IPFSRPCClient(host=rpc_host, port=rpc_port)
+            social_dag = SocialDAG(rpc_client)
+            discovery_hub = DiscoveryHub(rpc_client, social_dag, get_db_connection)
+            print(f"✅ IPFS RPC client ready at {rpc_host}:{rpc_port}")
+        except Exception as e:
+            print(f"⚠️  IPFS RPC init failed (uploads/IPNS will be unavailable): {e}")
 
-    # ── 3. P2P PubSub (optional — requires IPFS daemon with pubsub enabled) ──
-    try:
-        p2p_client = P2PClient(IPFS_BIN)
-        my_peer_id = await asyncio.to_thread(get_my_peer_id)
-        print(f"✅ P2P Node Identity: {my_peer_id}")
+        try:
+            p2p_client = P2PClient(IPFS_BIN)
+            my_peer_id = await asyncio.to_thread(get_my_peer_id)
+            print(f"✅ P2P Node Identity: {my_peer_id}")
 
-        inbox_topic = f"/app/inbox/{my_peer_id}"
-        await p2p_client.subscribe(inbox_topic, handle_inbox_message)
-        print(f"✅ Subscribed to P2P Inbox: {inbox_topic}")
+            inbox_topic = f"/app/inbox/{my_peer_id}"
+            await p2p_client.subscribe(inbox_topic, handle_inbox_message)
+            print(f"✅ Subscribed to P2P Inbox: {inbox_topic}")
 
-        if discovery_hub:
-            await p2p_client.subscribe("/app/discovery", discovery_hub.handle_discovery_message)
-            await p2p_client.subscribe("/app/feed/updates", discovery_hub.handle_feed_update)
-            print("✅ Subscribed to global discovery topics")
+            if discovery_hub:
+                await p2p_client.subscribe("/app/discovery", discovery_hub.handle_discovery_message)
+                await p2p_client.subscribe("/app/feed/updates", discovery_hub.handle_feed_update)
+                print("✅ Subscribed to global discovery topics")
 
-        asyncio.create_task(periodic_heartbeat())
+            asyncio.create_task(periodic_heartbeat())
 
-    except Exception as e:
-        print(f"⚠️  P2P/PubSub unavailable (real-time features disabled): {e}")
-        print("   → The REST API will still serve requests using the database.")
+        except Exception as e:
+            print(f"⚠️  P2P/PubSub unavailable (real-time features disabled): {e}")
+            print("   → The REST API will still serve requests using the database.")
+
+    # Fire-and-forget — server is ready to accept /health immediately after DB init
+    asyncio.create_task(_start_ipfs())
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -309,7 +313,7 @@ def run_command(command: Union[str, List[str]]) -> Optional[str]:
         result = subprocess.run(
             command, shell=is_shell, check=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            cwd=BASE_DIR
+            cwd=BASE_DIR, timeout=15
         )
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:

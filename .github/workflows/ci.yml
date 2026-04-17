@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feat/**]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Frontend: type-check + build ────────────────────────────────────────────
+  frontend:
+    name: Frontend (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type-check
+        run: npx tsc --noEmit
+
+      - name: Build
+        env:
+          # Use a placeholder backend URL so the proxy rewrite compiles
+          NEXT_PUBLIC_API_URL: https://placeholder-backend.up.railway.app
+          NEXT_PUBLIC_APP_URL: https://placeholder.vercel.app
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+  # ── Backend: import check + startup smoke-test ───────────────────────────────
+  backend:
+    name: Backend (FastAPI)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint (import check)
+        run: python -c "import main; print('✅ main.py imports OK')"
+
+      - name: Database init smoke-test (SQLite)
+        run: |
+          python -c "
+          from database import init_db
+          init_db()
+          print('✅ init_db() completed')
+          "
+        env:
+          # No DATABASE_URL → uses local SQLite
+          DATABASE_URL: ""
