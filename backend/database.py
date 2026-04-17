@@ -93,7 +93,7 @@ def get_db_connection() -> CompatConnection:
                 "Postgres configured via DATABASE_URL/SUPABASE_DB_URL, but psycopg is not installed."
             ) from e
 
-        conn = psycopg.connect(database_url, row_factory=dict_row)
+        conn = psycopg.connect(database_url, row_factory=dict_row, connect_timeout=10)
         return CompatConnection(conn, True)
 
     conn = sqlite3.connect(DB_PATH)
