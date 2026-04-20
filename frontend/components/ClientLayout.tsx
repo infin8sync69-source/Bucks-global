@@ -4,6 +4,7 @@ import React from 'react';
 import { usePathname } from 'next/navigation';
 import TopRightActions from '@/components/TopRightActions';
 import Sidebar from '@/components/Sidebar';
+import BottomNav from '@/components/BottomNav';
 import { fetchProfile } from '@/lib/api';
 
 // Pages where we hide navigation chrome for focused flows
@@ -36,21 +37,22 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             {!isFullScreen && <Sidebar />}
 
             {/* Main Content Area */}
-            {/* 
-                - Mobile: No padding needed (hamburger overlays)
+            {/*
+                - Mobile: pb-20 to clear the BottomNav (hidden on full-screen pages)
                 - Desktop: pl-64 (Sidebar width) ONLY if not full-screen
             */}
-            <div className={`transition-all duration-300 ${!isFullScreen ? 'md:pl-64' : ''
-                }`}>
+            <div className={`transition-all duration-300 ${!isFullScreen ? 'md:pl-64' : ''}`}>
                 <div className="flex justify-center min-h-screen">
-                    <main className={`w-full min-h-screen ${!isFullScreen ? 'md:max-w-2xl' : ''
-                        }`}>
+                    <main className={`w-full min-h-screen ${!isFullScreen ? 'md:max-w-2xl pb-20 md:pb-0' : ''}`}>
                         <div key={pathname} className="animate-in fade-in zoom-in-95 duration-300">
                             {children}
                         </div>
                     </main>
                 </div>
             </div>
+
+            {/* Bottom navigation — mobile only, hidden on full-screen flows */}
+            {!isFullScreen && <BottomNav />}
         </div>
     );
 }

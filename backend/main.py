@@ -2320,86 +2320,91 @@ async def update_profile_endpoint(
     avatar: str = Form(None),
     banner: str = Form(None)
 ):
-    """Update user profile in SQLite"""
+    """Update user profile — always preserves uuid7 so user stays discoverable in search."""
     did = get_current_did(request)
     if did == "anonymous":
         return {"success": False, "message": "Not authenticated"}
-    
+
+    # uuid7 is sent as X-UUID7 header by the frontend axios interceptor
+    uuid7 = request.headers.get("X-UUID7", "").strip() or None
+
     conn = get_db_connection()
     c = conn.cursor()
-    
-    # Check if user exists
+
+    # Look up by DID first, then by uuid7 (handles re-registration edge cases)
     user = c.execute("SELECT * FROM users WHERE did = ?", (did,)).fetchone()
-    
+    if not user and uuid7:
+        user = c.execute("SELECT * FROM users WHERE lower(uuid7) = lower(?)", (uuid7,)).fetchone()
+
     if not user:
-        # Insert new user
-        peer_id = did # Use DID as peer_id for new users
+        # Brand-new user — insert with uuid7 so they appear in search immediately
+        peer_id = did
+        effective_username = username or f"User_{did[:8]}"
+        effective_handle   = handle or f"@{effective_username.lower()}"
         c.execute("""
-            INSERT INTO users (peer_id, username, handle, bio, location, avatar, banner, did)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (peer_id, did, uuid7, username, handle, bio, location, avatar, banner)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(peer_id) DO UPDATE SET
+                uuid7    = COALESCE(excluded.uuid7, users.uuid7),
+                username = excluded.username,
+                handle   = excluded.handle,
+                bio      = excluded.bio,
+                location = excluded.location,
+                avatar   = CASE WHEN excluded.avatar != \'\' THEN excluded.avatar ELSE users.avatar END,
+                banner   = CASE WHEN excluded.banner != \'\' THEN excluded.banner ELSE users.banner END
         """, (
-            peer_id,
-            username or f"New User {did[:8]}",
-            handle or f"@{did[:8]}",
-            bio or "",
-            location or "",
-            avatar or "",
-            banner or "",
-            did
+            peer_id, did, uuid7,
+            effective_username, effective_handle,
+            bio or "", location or "", avatar or "", banner or "",
         ))
         profile = {
-            "peer_id": peer_id,
-            "username": username or f"New User {did[:8]}",
-            "handle": handle or f"@{did[:8]}",
-            "bio": bio or "",
-            "location": location or "",
-            "avatar": avatar or "",
-            "banner": banner or "",
-            "did": did,
-            "onboarding": not (username or handle)
+            "peer_id": peer_id, "did": did, "uuid7": uuid7,
+            "username": effective_username, "handle": effective_handle,
+            "bio": bio or "", "location": location or "",
+            "avatar": avatar or "", "banner": banner or "",
+            "stats": {"syncs": 0, "contacts": 0, "posts": 0, "likes": 0},
+            "onboarding": not username,
         }
     else:
-        # Update existing
+        # Update existing row — always write uuid7 if we have it
         profile = dict(user)
-        # Construct update query dynamically? Or just update fields if provided
-        # Since logic says "if username: profile[username] = username", it implies partial updates.
-        
         updates = []
-        params = []
-        
-        if username: 
-            updates.append("username = ?")
-            params.append(username)
+        params  = []
+
+        effective_uuid7 = uuid7 or profile.get("uuid7")
+        if effective_uuid7 and effective_uuid7 != profile.get("uuid7"):
+            updates.append("uuid7 = ?"); params.append(effective_uuid7)
+            profile["uuid7"] = effective_uuid7
+
+        if username:
+            updates.append("username = ?"); params.append(username)
             profile["username"] = username
         if handle:
-            updates.append("handle = ?")
-            params.append(handle)
+            updates.append("handle = ?"); params.append(handle)
             profile["handle"] = handle
-        if bio:
-            updates.append("bio = ?")
-            params.append(bio)
+        if bio is not None:
+            updates.append("bio = ?"); params.append(bio)
             profile["bio"] = bio
-        if location:
-            updates.append("location = ?")
-            params.append(location)
+        if location is not None:
+            updates.append("location = ?"); params.append(location)
             profile["location"] = location
         if avatar:
-            updates.append("avatar = ?")
-            params.append(avatar)
+            updates.append("avatar = ?"); params.append(avatar)
             profile["avatar"] = avatar
         if banner:
-            updates.append("banner = ?")
-            params.append(banner)
+            updates.append("banner = ?"); params.append(banner)
             profile["banner"] = banner
-            
+
         if updates:
-            sql = f"UPDATE users SET {', '.join(updates)} WHERE did = ?"
+            sql = f"UPDATE users SET {\', \'.join(updates)} WHERE did = ?"
             params.append(did)
             c.execute(sql, tuple(params))
-            
+
+        if not profile.get("stats"):
+            profile["stats"] = {"syncs": 0, "contacts": 0, "posts": 0, "likes": 0}
+
     conn.commit()
     conn.close()
-    
     return {"success": True, "profile": profile}
 
 # ==================== Social Recovery System ====================
