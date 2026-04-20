@@ -7,16 +7,13 @@ import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
 import { fetchProfile } from '@/lib/api';
 
-// Pages where we hide ALL navigation chrome
+// Pages where we hide navigation chrome for focused flows
 const FULL_SCREEN_PAGES = ['/login', '/create', '/recover', '/qr-scan'];
-// Pages with their own internal header — hide global TopRightActions + Sidebar but keep BottomNav
-const GLOBE_PAGES = ['/'];
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
+    const isHome = pathname === '/';
     const isFullScreen = FULL_SCREEN_PAGES.some(p => pathname.startsWith(p));
-    const isGlobePage = GLOBE_PAGES.includes(pathname);
-    const hideGlobalChrome = isFullScreen || isGlobePage;
 
     React.useEffect(() => {
         // Fetch profile once on mount to populate localStorage cache
@@ -32,12 +29,21 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
     return (
         <div className="min-h-screen relative" style={{ background: 'transparent' }}>
-            {!hideGlobalChrome && <TopRightActions />}
-            {!hideGlobalChrome && <Sidebar />}
+            {/* Top-right actions (notifications, search) — hide on full-screen pages */}
+            {!isFullScreen && <TopRightActions />}
 
-            <div className={`transition-all duration-300 ${!hideGlobalChrome ? 'md:pl-64' : ''}`}>
+            {/* Sidebar — logic handles mobile hamburger + desktop sidebar */}
+            {/* Hide sidebar completely on full-screen pages */}
+            {!isFullScreen && <Sidebar />}
+
+            {/* Main Content Area */}
+            {/*
+                - Mobile: pb-20 to clear the BottomNav (hidden on full-screen pages)
+                - Desktop: pl-64 (Sidebar width) ONLY if not full-screen
+            */}
+            <div className={`transition-all duration-300 ${!isFullScreen ? 'md:pl-64' : ''}`}>
                 <div className="flex justify-center min-h-screen">
-                    <main className={`w-full min-h-screen ${!hideGlobalChrome ? 'md:max-w-2xl' : ''}`}>
+                    <main className={`w-full min-h-screen ${!isFullScreen ? 'md:max-w-2xl pb-20 md:pb-0' : ''}`}>
                         <div key={pathname} className="animate-in fade-in zoom-in-95 duration-300">
                             {children}
                         </div>
@@ -45,7 +51,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                 </div>
             </div>
 
-            {/* Bottom nav — mobile only, all pages except full-screen flows */}
+            {/* Bottom navigation — mobile only, hidden on full-screen flows */}
             {!isFullScreen && <BottomNav />}
         </div>
     );
