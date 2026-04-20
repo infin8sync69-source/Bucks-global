@@ -129,13 +129,14 @@ function FeedContent() {
               onClick={() => setFilterType(type.id as any)}
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all"
               style={filterType === type.id ? {
-                background: "linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)",
-                color: "#fff",
-                boxShadow: "0 4px 16px rgba(106,0,255,0.35)",
-                transform: "scale(1.05)",
+                background: 'rgba(255,255,255,0.14)',
+                border: '1px solid rgba(255,255,255,0.26)',
+                color: 'rgba(255,255,255,0.95)',
+                boxShadow: '0 2px 12px rgba(255,255,255,0.08)',
+                transform: 'scale(1.04)',
               } : {
                 ...G.btn,
-                color: "rgba(100,0,200,0.55)",
+                color: 'rgba(255,255,255,0.40)',
                 borderRadius: 9999,
               }}
             >
@@ -150,9 +151,9 @@ function FeedContent() {
             onClick={() => setShowFilterMenu(!showFilterMenu)}
             className="flex items-center space-x-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all"
           style={showFilterMenu || source !== 'global' || sortBy !== 'newest' ? {
-            background: 'rgba(155,63,255,0.18)',
-            border: '1px solid rgba(155,63,255,0.35)',
-            color: 'rgba(155,63,255,0.90)',
+            background: 'rgba(255,255,255,0.12)',
+            border: '1px solid rgba(255,255,255,0.24)',
+            color: 'rgba(255,255,255,0.90)',
           } : { ...G.btn, color: 'rgba(255,255,255,0.38)' }}
           >
             <FaFilter className="text-[10px]" />
@@ -178,7 +179,7 @@ function FeedContent() {
                         key={s.id}
                         onClick={() => { setSource(s.id as any); setShowFilterMenu(false); }}
                         className="flex items-center justify-between px-2 py-1.5 rounded-lg text-sm transition-colors"
-                        style={{ color: source === s.id ? 'rgba(155,63,255,0.90)' : 'rgba(255,255,255,0.55)' }}
+                        style={{ color: source === s.id ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.50)' }}
                       >
                         <div className="flex items-center space-x-2">
                           <span>{s.icon}</span>
@@ -201,7 +202,7 @@ function FeedContent() {
                         key={s.id}
                         onClick={() => { setSortBy(s.id as any); setShowFilterMenu(false); }}
                         className="flex items-center justify-between px-2 py-1.5 rounded-lg text-sm transition-colors"
-                        style={{ color: sortBy === s.id ? 'rgba(155,63,255,0.90)' : 'rgba(255,255,255,0.55)' }}
+                        style={{ color: sortBy === s.id ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.50)' }}
                       >
                         <div className="flex items-center space-x-2">
                           <span>{s.icon}</span>
@@ -220,14 +221,14 @@ function FeedContent() {
 
       <div className="flex-1">
         {(filterCid || filterAuthor) && (
-          <div className="px-4 py-2 flex items-center justify-between" style={{ background: 'rgba(155,63,255,0.08)', borderBottom: '1px solid rgba(155,63,255,0.15)' }}>
-            <span className="text-xs font-medium" style={{ color: 'rgba(155,63,255,0.80)' }}>
+          <div className="px-4 py-2 flex items-center justify-between" style={{ background: 'rgba(255,255,255,0.06)', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
+            <span className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.65)' }}>
               Showing {filterCid ? 'selected post' : `posts by ${filterAuthor}`}
             </span>
             <button
               onClick={() => { window.history.replaceState(null, '', '/feed'); window.location.reload(); }}
               className="text-[10px] font-bold uppercase"
-              style={{ color: 'rgba(155,63,255,0.80)' }}
+              style={{ color: 'rgba(255,255,255,0.70)' }}
             >
               Clear Filter
             </button>
@@ -255,7 +256,7 @@ function FeedContent() {
             <button
               onClick={() => { setFilterType('all'); setSource('global'); setSortBy('newest'); }}
               className="mt-6 text-xs font-bold uppercase tracking-widest"
-              style={{ color: 'rgba(155,63,255,0.75)' }}
+              style={{ color: 'rgba(255,255,255,0.60)' }}
             >
               Reset all filters
             </button>

@@ -24,8 +24,7 @@ const D = {
     bright: 'rgba(255,255,255,0.92)',
     mid: 'rgba(255,255,255,0.58)',
     dim: 'rgba(255,255,255,0.32)',
-    purple: '#9B3FFF',
-    purpleSoft: 'rgba(155,63,255,0.85)',
+    accent: 'rgba(255,255,255,0.80)',
 };
 
 type ProfileTab = 'feed' | 'media' | 'files' | 'tweets';
@@ -219,8 +218,8 @@ export default function OwnProfilePage() {
                     <div
                         className="w-24 h-24 rounded-full p-[3px]"
                         style={{
-                            background: 'linear-gradient(135deg, #9B3FFF 0%, #6A00FF 60%, #c084fc 100%)',
-                            boxShadow: '0 0 0 3px #080810, 0 8px 32px rgba(155,63,255,0.50)',
+                            background: 'linear-gradient(135deg, rgba(255,255,255,0.50) 0%, rgba(255,255,255,0.20) 100%)',
+                            boxShadow: '0 0 0 3px rgba(8,8,16,0.90), 0 8px 32px rgba(255,255,255,0.12)',
                         }}
                     >
                         <div className="w-full h-full rounded-full overflow-hidden bg-gray-900 flex items-center justify-center">
@@ -260,7 +259,7 @@ export default function OwnProfilePage() {
                 <h1 className="text-xl font-bold" style={{ color: D.bright }}>{identity.username}</h1>
                 {location && (
                     <div className="flex items-center gap-1.5 mt-1">
-                        <FaLocationDot className="text-[10px]" style={{ color: D.purpleSoft }} />
+                        <FaLocationDot className="text-[10px]" style={{ color: D.dim }} />
                         <span className="text-xs" style={{ color: D.dim }}>{location}</span>
                     </div>
                 )}
@@ -292,9 +291,9 @@ export default function OwnProfilePage() {
                                 key={tag}
                                 className="text-xs px-2 py-0.5 rounded-full font-medium"
                                 style={{
-                                    background: 'rgba(155,63,255,0.12)',
-                                    border: '1px solid rgba(155,63,255,0.25)',
-                                    color: D.purpleSoft,
+                                    background: 'rgba(255,255,255,0.08)',
+                                    border: '1px solid rgba(255,255,255,0.15)',
+                                    color: D.mid,
                                 }}
                             >{tag}</span>
                         ))}
@@ -380,9 +379,9 @@ export default function OwnProfilePage() {
                         onClick={() => setActiveTab(tab.id)}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-all"
                         style={{
-                            background: activeTab === tab.id ? 'rgba(155,63,255,0.18)' : 'transparent',
-                            color: activeTab === tab.id ? D.purpleSoft : D.dim,
-                            border: activeTab === tab.id ? '1px solid rgba(155,63,255,0.30)' : '1px solid transparent',
+                            background: activeTab === tab.id ? 'rgba(255,255,255,0.10)' : 'transparent',
+                            color: activeTab === tab.id ? D.bright : D.dim,
+                            border: activeTab === tab.id ? '1px solid rgba(255,255,255,0.18)' : '1px solid transparent',
                         }}
                     >
                         {tab.icon} {tab.label}
@@ -397,7 +396,7 @@ export default function OwnProfilePage() {
                     <div>
                         {contentLoading ? (
                             <div className="flex items-center justify-center py-16">
-                                <div className="w-8 h-8 border-2 border-white/10 border-t-purple-500 rounded-full animate-spin" />
+                                <div className="w-8 h-8 border-2 border-white/10 border-t-white/50 rounded-full animate-spin" />
                             </div>
                         ) : library.length === 0 ? (
                             <EmptyState icon="📡" text="No posts yet" sub="Share something with your network" />
@@ -440,8 +439,8 @@ export default function OwnProfilePage() {
                                         className="flex items-center gap-3 p-3.5 rounded-2xl transition-all active:scale-[0.98]"
                                         style={{ ...G.card }}
                                     >
-                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(155,63,255,0.15)', border: '1px solid rgba(155,63,255,0.20)' }}>
-                                            <FaFileLines style={{ color: D.purpleSoft }} />
+                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)' }}>
+                                            <FaFileLines style={{ color: D.mid }} />
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-semibold truncate" style={{ color: D.bright }}>{item.name}</p>
@@ -480,7 +479,7 @@ export default function OwnProfilePage() {
                                 }
                             </div>
                             <span className="text-sm flex-1" style={{ color: D.dim }}>What&apos;s happening?</span>
-                            <div className="px-4 py-1.5 rounded-full text-xs font-bold shrink-0" style={{ background: 'linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)', color: '#fff', boxShadow: '0 4px 14px rgba(106,0,255,0.40)' }}>
+                            <div className="px-4 py-1.5 rounded-full text-xs font-bold shrink-0" style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.90)' }}>
                                 Tweet
                             </div>
                         </Link>

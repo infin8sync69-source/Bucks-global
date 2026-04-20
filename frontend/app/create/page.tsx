@@ -14,9 +14,9 @@ const D = {
     bright: 'rgba(255,255,255,0.92)',
     mid:    'rgba(255,255,255,0.55)',
     dim:    'rgba(255,255,255,0.30)',
-    purple: 'rgba(155,63,255,0.90)',
-    purpleBg: 'rgba(155,63,255,0.15)',
-    purpleBorder: 'rgba(155,63,255,0.30)',
+    accent: 'rgba(255,255,255,0.90)',
+    accentBg: 'rgba(255,255,255,0.13)',
+    accentBorder: 'rgba(255,255,255,0.24)',
 };
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -121,9 +121,10 @@ function CreateContent() {
                         disabled={isUploading || (!caption.trim() && !file)}
                         className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95 disabled:opacity-40"
                         style={{
-                            background: 'linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)',
-                            color: '#fff',
-                            boxShadow: '0 4px 16px rgba(106,0,255,0.40)',
+                            background: 'rgba(255,255,255,0.14)',
+                            border: '1px solid rgba(255,255,255,0.26)',
+                            color: 'rgba(255,255,255,0.95)',
+                            boxShadow: '0 2px 16px rgba(255,255,255,0.08)',
                         }}
                     >
                         {isUploading ? (
@@ -160,9 +161,9 @@ function CreateContent() {
                                     onClick={() => setVisibility(v.id as any)}
                                     className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all"
                                     style={visibility === v.id ? {
-                                        background: D.purpleBg,
-                                        border: `1px solid ${D.purpleBorder}`,
-                                        color: D.purple,
+                                        background: D.accentBg,
+                                        border: `1px solid ${D.accentBorder}`,
+                                        color: D.accent,
                                     } : {
                                         background: 'rgba(255,255,255,0.05)',
                                         border: '1px solid rgba(255,255,255,0.08)',
@@ -188,7 +189,7 @@ function CreateContent() {
                         style={{
                             background: 'transparent',
                             color: D.bright,
-                            caretColor: 'rgba(155,63,255,0.90)',
+                            caretColor: 'rgba(255,255,255,0.70)',
                         }}
                     />
                 </div>
@@ -213,7 +214,7 @@ function CreateContent() {
                 {/* Non-image file pill */}
                 {file && !previewUrl && (
                     <div className="mx-5 mb-4 flex items-center gap-3 px-4 py-3 rounded-2xl" style={{ ...G.medium }}>
-                        <FaFileLines style={{ color: D.purple }} />
+                        <FaFileLines style={{ color: D.accent }} />
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate" style={{ color: D.bright }}>{file.name}</p>
                             <p className="text-xs" style={{ color: D.dim }}>{(file.size / 1024).toFixed(0)} KB</p>

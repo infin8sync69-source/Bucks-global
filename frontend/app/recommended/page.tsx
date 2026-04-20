@@ -10,9 +10,9 @@ const D = {
     bright: 'rgba(255,255,255,0.92)',
     mid:    'rgba(255,255,255,0.55)',
     dim:    'rgba(255,255,255,0.30)',
-    purple: 'rgba(155,63,255,0.90)',
-    purpleBg: 'rgba(155,63,255,0.15)',
-    purpleBorder: 'rgba(155,63,255,0.30)',
+    accent: 'rgba(255,255,255,0.90)',
+    accentBg: 'rgba(255,255,255,0.13)',
+    accentBorder: 'rgba(255,255,255,0.24)',
 };
 
 const FILTERS = [
@@ -79,7 +79,7 @@ export default function Recommended() {
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             className="flex-1 bg-transparent outline-none text-sm"
-                            style={{ color: D.bright, caretColor: D.purple }}
+                            style={{ color: D.bright, caretColor: D.accent }}
                         />
                     </div>
                 </div>
@@ -92,11 +92,12 @@ export default function Recommended() {
                             onClick={() => setFilter(f.id as any)}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all shrink-0"
                             style={filter === f.id ? {
-                                background: 'linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)',
-                                color: '#fff',
-                                boxShadow: '0 4px 12px rgba(106,0,255,0.35)',
+                                background: D.accentBg,
+                                border: `1px solid ${D.accentBorder}`,
+                                color: D.accent,
+                                boxShadow: '0 2px 12px rgba(255,255,255,0.08)',
                             } : {
-                                background: 'rgba(255,255,255,0.06)',
+                                background: 'rgba(255,255,255,0.05)',
                                 border: '1px solid rgba(255,255,255,0.09)',
                                 color: D.dim,
                             }}
@@ -129,9 +130,9 @@ export default function Recommended() {
                                     onClick={() => setVisibleCount(c => c + 10)}
                                     className="px-6 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-95"
                                     style={{
-                                        background: 'rgba(155,63,255,0.15)',
-                                        border: '1px solid rgba(155,63,255,0.30)',
-                                        color: D.purple,
+                                        background: 'rgba(255,255,255,0.08)',
+                                        border: '1px solid rgba(255,255,255,0.16)',
+                                        color: D.accent,
                                     }}
                                 >
                                     See more

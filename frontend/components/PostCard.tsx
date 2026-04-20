@@ -18,7 +18,7 @@ const D = {
     bright: 'rgba(255,255,255,0.92)',
     mid:    'rgba(255,255,255,0.55)',
     dim:    'rgba(255,255,255,0.32)',
-    purpleSoft: 'rgba(155,63,255,0.80)',
+    accent: 'rgba(255,255,255,0.70)',
 };
 
 interface PostCardProps {
@@ -135,14 +135,14 @@ const PostCard = ({ item, interactions: initialInteractions, onPostDeleted, onPo
             {item.recommended_by && item.recommended_by.length > 0 && (
                 <div
                     className="flex items-center gap-2 px-4 py-2"
-                    style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(155,63,255,0.06)' }}
+                    style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.04)' }}
                 >
                     <div className="flex -space-x-1.5">
                         {item.recommended_by.slice(0, 3).map((name: string, i: number) => (
                             <div
                                 key={i}
                                 className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold border border-black/30"
-                                style={{ background: 'rgba(155,63,255,0.30)', color: D.purpleSoft }}
+                                style={{ background: 'rgba(255,255,255,0.12)', color: D.accent }}
                             >
                                 {name[0].toUpperCase()}
                             </div>
@@ -235,7 +235,7 @@ const PostCard = ({ item, interactions: initialInteractions, onPostDeleted, onPo
                             <button
                                 onClick={handleSaveEdit}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-                                style={{ background: 'rgba(155,63,255,0.20)', border: '1px solid rgba(155,63,255,0.35)', color: D.purpleSoft }}
+                                style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: D.accent }}
                             >
                                 <FaCheck className="text-[10px]" /> Save
                             </button>
@@ -282,7 +282,7 @@ const PostCard = ({ item, interactions: initialInteractions, onPostDeleted, onPo
                             <p className="text-sm font-semibold mb-2" style={{ color: D.bright }}>{filename}</p>
                             <a href={ipfsUrl} target="_blank" rel="noopener noreferrer"
                                 className="inline-block text-xs font-semibold px-4 py-1.5 rounded-full"
-                                style={{ background: 'rgba(155,63,255,0.18)', border: '1px solid rgba(155,63,255,0.30)', color: D.purpleSoft }}>
+                                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)', color: D.accent }}>
                                 Download
                             </a>
                         </div>
