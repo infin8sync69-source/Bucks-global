@@ -27,13 +27,14 @@ const D = {
     accent: 'rgba(255,255,255,0.80)',
 };
 
-type ProfileTab = 'feed' | 'media' | 'files' | 'tweets';
+type ProfileTab = 'feed' | 'media' | 'files' | 'about' | 'recommended';
 
 const TABS: { id: ProfileTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'feed',   label: 'Feed',   icon: <FaRss      className="text-[10px]" /> },
-    { id: 'media',  label: 'Media',  icon: <FaImage    className="text-[10px]" /> },
-    { id: 'files',  label: 'Files',  icon: <FaFileLines className="text-[10px]" /> },
-    { id: 'tweets', label: 'Tweets', icon: <FaFeather  className="text-[10px]" /> },
+    { id: 'feed',        label: 'Feed',        icon: <FaRss       className="text-[10px]" /> },
+    { id: 'media',       label: 'Media',       icon: <FaImage     className="text-[10px]" /> },
+    { id: 'files',       label: 'Files',       icon: <FaFileLines className="text-[10px]" /> },
+    { id: 'about',       label: 'About',       icon: <FaPen       className="text-[10px]" /> },
+    { id: 'recommended', label: 'Recommended', icon: <FaRss       className="text-[10px]" /> },
 ];
 
 function formatBytes(bytes: number) {
@@ -121,7 +122,6 @@ export default function OwnProfilePage() {
     const fileItems  = library.filter(item =>
         !item.filename?.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|mp4|webm)$/i)
     );
-    const tweetItems = library.filter(item => !item.filename && item.description);
 
     const copyLink = async () => {
         await navigator.clipboard.writeText(profileUrl).catch(() => {});
@@ -465,30 +465,68 @@ export default function OwnProfilePage() {
                     </div>
                 )}
 
-                {activeTab === 'tweets' && (
-                    <div className="px-4">
-                        <Link
-                            href="/create"
-                            className="flex items-center gap-3 p-3.5 rounded-2xl mb-3"
-                            style={{ ...G.card }}
-                        >
-                            <div className="w-9 h-9 rounded-full overflow-hidden shrink-0" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)' }}>
-                                {identity.avatar
-                                    ? <img src={identity.avatar} alt="" className="w-full h-full object-cover" />
-                                    : <div className="w-full h-full flex items-center justify-center text-sm" style={{ color: D.dim }}>{identity.username.charAt(0)}</div>
+                {activeTab === 'about' && (
+                    <div className="px-4 space-y-4">
+                        <div style={{ ...G.card, borderRadius: 20, position: 'relative', overflow: 'hidden', padding: 20 }}>
+                            <Specular />
+                            <div className="space-y-4">
+                                {editBio && (
+                                    <div>
+                                        <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: D.dim }}>Bio</p>
+                                        <p style={{ color: D.bright, lineHeight: 1.5 }}>{bioText}</p>
+                                        {hashtags.length > 0 && (
+                                            <div className="flex flex-wrap gap-2 mt-2">
+                                                {hashtags.map((tag, idx) => (
+                                                    <span key={idx} className="text-xs px-2.5 py-1 rounded-full" style={{ background: 'rgba(155,63,255,0.20)', color: 'rgba(200,100,255,1)' }}>
+                                                        {tag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {location && (
+                                    <div>
+                                        <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: D.dim }}>Location</p>
+                                        <div className="flex items-center gap-2" style={{ color: D.bright }}>
+                                            <FaLocationDot className="text-sm" />
+                                            {location}
+                                        </div>
+                                    </div>
+                                )}
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: D.dim }}>ID</p>
+                                    <p className="font-mono text-xs" style={{ color: D.mid }}>{shortUUID(identity.uuid7 || '')}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: D.dim }}>Connections</p>
+                                    <p style={{ color: D.bright }}>{connections.length} synced {connections.length === 1 ? 'device' : 'devices'}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'recommended' && (
+                    <div className="px-4 space-y-2">
+                        {library.length === 0 ? (
+                            <EmptyState icon="⭐" text="No recommendations yet" sub="Your liked posts will appear here" />
+                        ) : (
+                            <div className="py-2">
+                                <p className="text-xs font-bold uppercase tracking-wider mb-3 px-2" style={{ color: D.dim }}>Most liked content</p>
+                                {library
+                                    .filter(item => (interactions[item.cid]?.likes_count || 0) > 0)
+                                    .sort((a, b) => (interactions[b.cid]?.likes_count || 0) - (interactions[a.cid]?.likes_count || 0))
+                                    .slice(0, 20)
+                                    .map(item => (
+                                        <PostCard key={item.cid} item={item} interactions={interactions[item.cid]} onInteraction={() => {}} />
+                                    ))
                                 }
+                                {library.filter(item => (interactions[item.cid]?.likes_count || 0) > 0).length === 0 && (
+                                    <EmptyState icon="💫" text="No liked posts" sub="Engage with posts to build recommendations" />
+                                )}
                             </div>
-                            <span className="text-sm flex-1" style={{ color: D.dim }}>What&apos;s happening?</span>
-                            <div className="px-4 py-1.5 rounded-full text-xs font-bold shrink-0" style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.90)' }}>
-                                Tweet
-                            </div>
-                        </Link>
-                        {tweetItems.length === 0
-                            ? <EmptyState icon="🐦" text="No tweets yet" sub="Post short thoughts and updates" />
-                            : tweetItems.map(item => (
-                                <PostCard key={item.cid} item={item} interactions={interactions[item.cid]} onInteraction={() => {}} />
-                            ))
-                        }
+                        )}
                     </div>
                 )}
             </div>
