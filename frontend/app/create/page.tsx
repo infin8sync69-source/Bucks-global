@@ -124,32 +124,47 @@ function CreateContent() {
         }
     };
 
+    const BRIGHT = 'rgba(255,255,255,0.92)';
+    const MID    = 'rgba(255,255,255,0.55)';
+    const DIM    = 'rgba(255,255,255,0.30)';
+
     // ── Render ─────────────────────────────────────────────────────────────────
     return (
         <div
-            className="min-h-screen bg-white flex flex-col"
+            className="min-h-screen flex flex-col"
+            style={{ background: 'rgba(8,8,16,1)' }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
         >
             {/* ── Top bar ────────────────────────────────────────────────────── */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white sticky top-0 z-20">
+            <div
+                className="flex items-center justify-between px-4 py-3 sticky top-0 z-20"
+                style={{
+                    background: 'rgba(8,8,16,0.85)',
+                    backdropFilter: 'blur(32px)',
+                    WebkitBackdropFilter: 'blur(32px)',
+                    borderBottom: '1px solid rgba(255,255,255,0.08)',
+                }}
+            >
                 <button
                     onClick={() => router.back()}
-                    className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-600"
+                    className="p-2 rounded-full transition-colors"
+                    style={{ color: DIM }}
                 >
                     <FaXmark className="text-xl" />
                 </button>
 
-                <span className="font-black text-base text-gray-900">New Post</span>
+                <span className="font-black text-base" style={{ color: BRIGHT }}>New Post</span>
 
                 <button
                     onClick={handleSubmit}
                     disabled={!canSubmit || isUploading}
-                    className="flex items-center gap-2 px-5 py-2 rounded-full font-bold text-sm transition-all disabled:opacity-40 text-white"
+                    className="flex items-center gap-2 px-5 py-2 rounded-full font-bold text-sm transition-all active:scale-95 disabled:opacity-40"
                     style={{
-                        background: canSubmit && !isUploading
-                            ? 'linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)'
-                            : '#d1d5db',
+                        background: 'linear-gradient(145deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.08) 100%)',
+                        border: '1px solid rgba(255,255,255,0.24)',
+                        color: 'rgba(255,255,255,0.92)',
+                        boxShadow: '0 2px 16px rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.22)',
                     }}
                 >
                     <FaPaperPlane className="text-xs" />
@@ -159,27 +174,26 @@ function CreateContent() {
 
             {/* ── Upload progress bar ─────────────────────────────────────────── */}
             {isUploading && (
-                <div className="h-1 bg-gray-100 w-full">
+                <div className="h-0.5 w-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
                     <div
                         className="h-full transition-all duration-300"
-                        style={{
-                            width: `${progress}%`,
-                            background: 'linear-gradient(90deg, #9B3FFF, #6A00FF)',
-                        }}
+                        style={{ width: `${progress}%`, background: 'rgba(255,255,255,0.50)' }}
                     />
                 </div>
             )}
 
             {/* ── Tab bar ────────────────────────────────────────────────────── */}
-            <div className="flex border-b border-gray-100 bg-white">
+            <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
                 {TABS.map(tab => (
                     <button
                         key={tab.id}
                         onClick={() => switchTab(tab.id)}
                         className="flex-1 flex flex-col items-center gap-1 py-3 text-xs font-bold transition-all"
                         style={{
-                            color: activeTab === tab.id ? '#6A00FF' : '#9ca3af',
-                            borderBottom: activeTab === tab.id ? '2px solid #6A00FF' : '2px solid transparent',
+                            color: activeTab === tab.id ? BRIGHT : DIM,
+                            borderBottom: activeTab === tab.id
+                                ? '2px solid rgba(255,255,255,0.55)'
+                                : '2px solid transparent',
                         }}
                     >
                         <span className="text-base">{tab.icon}</span>
@@ -198,7 +212,12 @@ function CreateContent() {
                             value={text}
                             onChange={e => setText(e.target.value.slice(0, MAX_TEXT_LEN))}
                             placeholder="What's on your mind? Use #hashtags to categorise…"
-                            className="flex-1 w-full resize-none outline-none text-gray-900 placeholder:text-gray-300 text-base leading-relaxed min-h-[200px]"
+                            className="flex-1 w-full resize-none outline-none text-base leading-relaxed min-h-[200px]"
+                            style={{
+                                background: 'transparent',
+                                color: BRIGHT,
+                                caretColor: 'rgba(255,255,255,0.70)',
+                            }}
                             autoFocus
                             disabled={isUploading}
                         />
@@ -210,7 +229,11 @@ function CreateContent() {
                                     <span
                                         key={i}
                                         className="px-2 py-0.5 rounded-full text-[11px] font-bold"
-                                        style={{ background: 'rgba(106,0,255,0.08)', color: '#6A00FF' }}
+                                        style={{
+                                            background: 'rgba(255,255,255,0.08)',
+                                            border: '1px solid rgba(255,255,255,0.14)',
+                                            color: MID,
+                                        }}
                                     >
                                         <FaHashtag className="inline text-[9px] mr-0.5" />{m[1]}
                                     </span>
@@ -218,9 +241,12 @@ function CreateContent() {
                             </div>
                         )}
 
-                        <div className="flex items-center justify-between text-xs text-gray-300">
+                        <div className="flex items-center justify-between text-xs" style={{ color: DIM }}>
                             <span>{charsLeft} chars left</span>
-                            <span className={charsLeft < 100 ? 'text-orange-400 font-bold' : ''}>{text.length}/{MAX_TEXT_LEN}</span>
+                            <span className={charsLeft < 100 ? 'font-bold' : ''}
+                                  style={{ color: charsLeft < 100 ? 'rgba(251,191,36,0.80)' : DIM }}>
+                                {text.length}/{MAX_TEXT_LEN}
+                            </span>
                         </div>
                     </div>
                 )}
@@ -228,7 +254,6 @@ function CreateContent() {
                 {/* MEDIA / FILE TABS */}
                 {activeTab !== 'text' && (
                     <div className="flex-1 flex flex-col gap-4">
-                        {/* Drop zone / preview */}
                         {!file ? (
                             <button
                                 onClick={() => {
@@ -237,20 +262,25 @@ function CreateContent() {
                                         fileInputRef.current.click();
                                     }
                                 }}
-                                className="flex-1 min-h-[220px] flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-gray-200 hover:border-primary hover:bg-primary/5 transition-all group"
+                                className="flex-1 min-h-[220px] flex flex-col items-center justify-center gap-3 rounded-3xl transition-all"
+                                style={{
+                                    border: '1.5px dashed rgba(255,255,255,0.14)',
+                                    background: 'rgba(255,255,255,0.02)',
+                                    color: DIM,
+                                }}
                             >
-                                <span className="text-5xl text-gray-200 group-hover:text-primary transition-colors">
+                                <span className="text-5xl opacity-40">
                                     {TABS.find(t => t.id === activeTab)!.icon}
                                 </span>
                                 <div className="text-center">
-                                    <p className="font-bold text-gray-400 group-hover:text-primary transition-colors">
+                                    <p className="font-bold text-sm" style={{ color: MID }}>
                                         Tap to select {activeTab}
                                     </p>
-                                    <p className="text-xs text-gray-300 mt-0.5">or drag and drop · max 50 MB</p>
+                                    <p className="text-xs mt-0.5" style={{ color: DIM }}>or drag and drop · max 50 MB</p>
                                 </div>
                             </button>
                         ) : (
-                            <div className="relative rounded-3xl overflow-hidden bg-black flex items-center justify-center min-h-[220px]">
+                            <div className="relative rounded-3xl overflow-hidden bg-black/60 flex items-center justify-center min-h-[220px]" style={{ border: '1px solid rgba(255,255,255,0.10)' }}>
                                 {previewUrl && activeTab === 'photo' && (
                                     <img src={previewUrl} alt="Preview" className="max-h-80 w-full object-contain" />
                                 )}
@@ -259,52 +289,52 @@ function CreateContent() {
                                 )}
                                 {activeTab === 'file' && (
                                     <div className="py-16 flex flex-col items-center gap-2">
-                                        <FaPaperclip className="text-4xl text-white/50" />
-                                        <p className="text-white/70 font-medium text-sm">{file.name}</p>
-                                        <p className="text-white/40 text-xs">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                                        <FaPaperclip className="text-4xl" style={{ color: MID }} />
+                                        <p className="font-medium text-sm" style={{ color: MID }}>{file.name}</p>
+                                        <p className="text-xs" style={{ color: DIM }}>{(file.size / 1024 / 1024).toFixed(2)} MB</p>
                                     </div>
                                 )}
-                                {/* Remove file button */}
                                 <button
                                     onClick={clearFile}
-                                    className="absolute top-3 right-3 p-2 bg-black/50 text-white rounded-full backdrop-blur-sm hover:bg-black/70 transition-colors"
+                                    className="absolute top-3 right-3 p-2 rounded-full transition-colors"
+                                    style={{ background: 'rgba(0,0,0,0.55)', color: 'rgba(255,255,255,0.80)' }}
                                 >
                                     <FaXmark />
                                 </button>
                             </div>
                         )}
 
-                        {/* Caption for media posts */}
                         <textarea
                             value={text}
                             onChange={e => setText(e.target.value.slice(0, MAX_TEXT_LEN))}
-                            placeholder={`Write a caption… #hashtags welcome`}
-                            className="w-full resize-none outline-none text-gray-700 placeholder:text-gray-300 text-sm leading-relaxed border border-gray-100 rounded-2xl p-4 min-h-[80px]"
+                            placeholder="Write a caption… #hashtags welcome"
+                            className="w-full resize-none outline-none text-sm leading-relaxed rounded-2xl p-4 min-h-[80px]"
+                            style={{
+                                background: 'rgba(255,255,255,0.04)',
+                                border: '1px solid rgba(255,255,255,0.09)',
+                                color: BRIGHT,
+                                caretColor: 'rgba(255,255,255,0.70)',
+                            }}
                             disabled={isUploading}
                         />
 
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            className="hidden"
-                            onChange={handleFileChange}
-                        />
+                        <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} />
                     </div>
                 )}
 
                 {/* ── Visibility ───────────────────────────────────────────────── */}
-                <div className="border-t border-gray-100 pt-4">
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Audience</p>
+                <div className="pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+                    <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: DIM }}>Audience</p>
                     <div className="flex gap-2">
                         {(['public', 'connections'] as const).map(v => (
                             <button
                                 key={v}
                                 onClick={() => setVisibility(v)}
-                                className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-2"
+                                className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"
                                 style={{
-                                    borderColor: visibility === v ? '#6A00FF' : '#e5e7eb',
-                                    color: visibility === v ? '#6A00FF' : '#9ca3af',
-                                    background: visibility === v ? 'rgba(106,0,255,0.05)' : 'transparent',
+                                    background: visibility === v ? 'rgba(255,255,255,0.10)' : 'transparent',
+                                    border: `1px solid ${visibility === v ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)'}`,
+                                    color: visibility === v ? BRIGHT : DIM,
                                 }}
                             >
                                 {v === 'public' ? <FaGlobe /> : <FaUserGroup />}
@@ -317,7 +347,8 @@ function CreateContent() {
 
             {/* ── Error toast ────────────────────────────────────────────────── */}
             {error && (
-                <div className="fixed bottom-32 left-1/2 -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-full text-sm font-bold shadow-xl animate-in fade-in slide-in-from-bottom-5 z-50">
+                <div className="fixed bottom-32 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full text-sm font-bold shadow-xl animate-in fade-in slide-in-from-bottom-5 z-50"
+                     style={{ background: 'rgba(239,68,68,0.90)', color: '#fff' }}>
                     {error}
                 </div>
             )}

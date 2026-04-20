@@ -18,7 +18,7 @@ const TopRightActions = () => {
         width: 40,
         height: 40,
         borderRadius: "50%",
-        color: isHome ? "#fff" : "#6A00FF",
+        color: "rgba(255,255,255,0.70)",
         transition: "opacity 0.2s, transform 0.15s",
         position: "relative",
     };
@@ -41,7 +41,7 @@ const TopRightActions = () => {
             {/* Notifications */}
             <Link href="/notifications" style={{ ...glassIconStyle, position: "relative" }}>
                 <FaRegBell className="text-sm" />
-                <div className="absolute top-2 right-3 w-1.5 h-1.5 bg-[#6A00FF] rounded-full"></div>
+                <div className="absolute top-2 right-3 w-1.5 h-1.5 bg-white/60 rounded-full"></div>
             </Link>
         </div>
     );
