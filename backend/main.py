@@ -14,6 +14,8 @@ from typing import Optional, List, Dict, Union, Any
 import socket
 import asyncio
 import random
+import logging
+import sys
 from pydantic import BaseModel
 
 try:
@@ -34,12 +36,31 @@ from utils.social_dag import SocialDAG
 from utils.discovery import DiscoveryHub
 
 
+# ==================== Logging Configuration ====================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+    ]
+)
+logger = logging.getLogger("bucks")
+
 # Agent Service Removed
 # agent_service = AgentService()
 p2p_client = None
 rpc_client: Optional[IPFSRPCClient] = None
 social_dag: Optional[SocialDAG] = None
 discovery_hub: Optional[DiscoveryHub] = None
+
+# Global notification queues for SSE
+notification_queues: Dict[str, asyncio.Queue] = {}
+
+def get_notification_queue(did: str) -> asyncio.Queue:
+    """Get or create notification queue for a user"""
+    if did not in notification_queues:
+        notification_queues[did] = asyncio.Queue(maxsize=100)
+    return notification_queues[did]
 
 def _env_int(key: str, default: int) -> int:
     try:
@@ -881,10 +902,10 @@ async def upload_file(
     file: UploadFile = File(...),
     title: str = Form(""),
     description: str = Form(""),
-    upload_type: str = Form("post"), # post, avatar, banner
-    visibility: str = Form("public"), # public, connections
+    upload_type: str = Form("post"),
+    visibility: str = Form("public"),
 ):
-    """Upload file to IPFS and add to library (if post)"""
+    """Upload file to IPFS with proper error handling and transaction support"""
     did = get_current_did(request)
     
     if len(title) > 200:
@@ -893,145 +914,189 @@ async def upload_file(
         raise HTTPException(status_code=400, detail="Description too long (max 5000 chars)")
         
     temp_path = None
+    conn = None
     try:
-        # Save uploaded file temporarily
+        # ── Step 1: Upload to IPFS ────────────────────────────────────
         temp_dir = tempfile.gettempdir()
         safe_filename = secure_filename(file.filename)
         temp_path = os.path.join(temp_dir, f"temp_{uuid.uuid4().hex}_{safe_filename}")
+        
         with open(temp_path, "wb") as f:
             content = await file.read()
             f.write(content)
         
-        final_path = temp_path
-
-        # Add to IPFS via RPC Client
         cid = await rpc_client.add(content)
         if not cid:
             raise HTTPException(status_code=500, detail="Failed to add file to IPFS")
         
-        # Pin to cluster (we might still need run_command for this, but specify API if needed)
-        try:
-            await run_command_async([CLUSTER_CTL, "pin", "add", cid])
-        except Exception: pass
-
+        # ── Step 2: Generate thumbnail if PDF ────────────────────────
         thumbnail_cid = None
         if upload_type == "post" and file.filename.lower().endswith(".pdf"):
-            # Generate thumbnail for PDF
             try:
                 thumb_path = generate_pdf_thumbnail(temp_path)
                 if thumb_path and os.path.exists(thumb_path):
                     with open(thumb_path, "rb") as tf:
-                        thumb_content = tf.read()
-                    thumbnail_cid = await rpc_client.add(thumb_content)
-                    if thumbnail_cid:
-                        await run_command_async([CLUSTER_CTL, "pin", "add", thumbnail_cid])
+                        thumbnail_cid = await rpc_client.add(tf.read())
                     os.remove(thumb_path)
             except Exception as te:
-                print(f"Thumbnail generation failed: {te}")
-
-        if upload_type == "post":
-            # Load user profile from DB
-            conn = get_db_connection()
-            # Use DID to find user
-            user_profile = conn.execute("SELECT * FROM users WHERE peer_id = ?", (did,)).fetchone()
-            
-            if not user_profile:
-                # Fallback if user not found (e.g. anonymous or new)
-                user_profile = {"username": "Anonymous", "avatar": "files/avatar_placeholder.png"}
-            else:
-                user_profile = dict(user_profile)
-            
-            # Create library entry
-            entry_dict = {
-                "name": title or safe_filename,
-                "description": description,
-                "filename": safe_filename,
-                "cid": cid,
-                "thumbnail_cid": thumbnail_cid,
-                "type": "file",
-                "author": user_profile.get("username", "Anonymous"),
-                "avatar": user_profile.get("avatar", "files/avatar_placeholder.png"),
-                "peer_id": did, # Use DID as peer_id
-                "visibility": visibility, 
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }
-
-            # Insert into DB
-            c = conn.cursor()
-            c.execute("""
-                INSERT INTO posts (id, name, description, filename, type, author, avatar, timestamp, peer_id, tag)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                entry_dict["cid"],
-                entry_dict["name"],
-                entry_dict["description"],
-                entry_dict["filename"],
-                entry_dict["type"],
-                entry_dict["author"],
-                entry_dict["avatar"],
-                entry_dict["timestamp"],
-                entry_dict["peer_id"],
-                "" # tag
-            ))
-
-            # --- Global Scale DAG Integration ---
-            try:
-                # 1. Get current DAG root
-                user_row = c.execute("SELECT dag_root, username, handle, avatar, bio FROM users WHERE peer_id = ?", (did,)).fetchone()
-                if user_row:
-                    user_data = dict(user_row)
-                    old_dag_root = user_data.get("dag_root")
-                    
-                    # 2. Get the current feed head from the old DAG root
-                    prev_post_cid = None
-                    if old_dag_root:
-                        try:
-                            root_node = await rpc_client.dag_get(old_dag_root)
-                            prev_post_cid = root_node.get("feed_head")
-                        except: pass
-                    
-                    # 3. Create new Linked Post in DAG
-                    new_post_cid = await social_dag.create_post(entry_dict, prev_post_cid)
-                    
-                    # 4. Update Profile Root with new feed head
-                    profile_data = {
-                        "username": user_data["username"],
-                        "handle": user_data["handle"],
-                        "avatar": user_data["avatar"],
-                        "bio": user_data.get("bio", ""),
-                        "peer_id": did
-                    }
-                    new_dag_root = await social_dag.update_profile(profile_data, new_post_cid)
-                    
-                    # 5. Save new Root to DB
-                    c.execute("UPDATE users SET dag_root = ? WHERE peer_id = ?", (new_dag_root, did))
-                    print(f"Decentralized Feed Updated: {new_dag_root}")
-            except Exception as dag_err:
-                print(f"DAG Update failed: {dag_err}")
-
-            conn.commit()
-            conn.close()
-            
-            # Publish update via PubSub for real-time global discovery
-            await rpc_client.pubsub_pub("/app/feed/updates", json.dumps({
-                "peer_id": did,
-                "new_root": new_dag_root if 'new_dag_root' in locals() else None,
-                "timestamp": datetime.now().isoformat()
-            }))
+                logger.warning(f"PDF thumbnail failed: {te}")
         
-        return {
-            "success": True,
-            "cid": cid,
-            "thumbnail_cid": thumbnail_cid,
-            "filename": safe_filename,
-            "upload_type": upload_type
-        }
-
+        # ── Step 3: Transactional DB Update ────────────────────────────
+        if upload_type == "post":
+            conn = get_db_connection()
+            c = conn.cursor()
+            
+            try:
+                # Fetch user profile
+                user_profile = c.execute(
+                    "SELECT * FROM users WHERE peer_id = ?", (did,)
+                ).fetchone()
+                
+                if not user_profile:
+                    user_profile = {
+                        "username": "Anonymous",
+                        "avatar": "files/avatar_placeholder.png",
+                        "dag_root": None
+                    }
+                else:
+                    user_profile = dict(user_profile)
+                
+                # Create entry
+                entry_dict = {
+                    "name": title or safe_filename,
+                    "description": description,
+                    "filename": safe_filename,
+                    "cid": cid,
+                    "thumbnail_cid": thumbnail_cid,
+                    "type": "file",
+                    "author": user_profile.get("username", "Anonymous"),
+                    "avatar": user_profile.get("avatar", ""),
+                    "peer_id": did,
+                    "visibility": visibility,
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                # ── Phase 1: Write to SQL ────────────────────────────────
+                c.execute("""
+                    INSERT INTO posts (id, name, description, filename, type, author, avatar, timestamp, peer_id, visibility)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    entry_dict["cid"],
+                    entry_dict["name"],
+                    entry_dict["description"],
+                    entry_dict["filename"],
+                    entry_dict["type"],
+                    entry_dict["author"],
+                    entry_dict["avatar"],
+                    entry_dict["timestamp"],
+                    entry_dict["peer_id"],
+                    entry_dict["visibility"]
+                ))
+                
+                # ── Phase 2: Update DAG (with validation) ────────────────
+                new_dag_root = None
+                if social_dag and rpc_client:
+                    user_row = c.execute(
+                        "SELECT dag_root, username, handle, avatar, bio FROM users WHERE peer_id = ?",
+                        (did,)
+                    ).fetchone()
+                    
+                    if user_row:
+                        user_data = dict(user_row)
+                        old_dag_root = user_data.get("dag_root")
+                        
+                        prev_post_cid = None
+                        if old_dag_root:
+                            try:
+                                root_node = await rpc_client.dag_get(old_dag_root)
+                                prev_post_cid = root_node.get("feed_head")
+                            except Exception as e:
+                                logger.warning(f"Could not retrieve previous DAG root: {e}")
+                        
+                        try:
+                            new_post_cid = await social_dag.create_post(entry_dict, prev_post_cid)
+                            if not new_post_cid:
+                                raise ValueError("Failed to create post in DAG")
+                            
+                            profile_data = {
+                                "username": user_data["username"],
+                                "handle": user_data["handle"],
+                                "avatar": user_data["avatar"],
+                                "bio": user_data.get("bio", ""),
+                                "peer_id": did
+                            }
+                            new_dag_root = await social_dag.update_profile(profile_data, new_post_cid)
+                            
+                            if not new_dag_root:
+                                raise ValueError("Failed to update profile in DAG")
+                            
+                            c.execute(
+                                "UPDATE users SET dag_root = ? WHERE peer_id = ?",
+                                (new_dag_root, did)
+                            )
+                            
+                        except Exception as dag_err:
+                            logger.error(f"DAG update failed for {did}: {dag_err}", exc_info=True)
+                            conn.rollback()
+                            raise HTTPException(
+                                status_code=500,
+                                detail=f"Failed to sync to decentralized network: {str(dag_err)}"
+                            )
+                
+                # ── Phase 3: Commit ──────────────────────────────────────
+                conn.commit()
+                
+                # ── Phase 4: Publish Updates ──────────────────────────────
+                try:
+                    if rpc_client:
+                        await rpc_client.pubsub_pub("/app/feed/updates", json.dumps({
+                            "peer_id": did,
+                            "new_root": new_dag_root,
+                            "post_cid": cid,
+                            "timestamp": datetime.now().isoformat()
+                        }))
+                except Exception as pub_err:
+                    logger.warning(f"PubSub publish failed: {pub_err}")
+                
+                # ── Phase 5: Pin to Cluster ──────────────────────────────
+                try:
+                    await run_command_async([CLUSTER_CTL, "pin", "add", cid])
+                    if thumbnail_cid:
+                        await run_command_async([CLUSTER_CTL, "pin", "add", thumbnail_cid])
+                except Exception as pin_err:
+                    logger.warning(f"Cluster pin failed: {pin_err}")
+                
+                return {
+                    "success": True,
+                    "cid": cid,
+                    "thumbnail_cid": thumbnail_cid,
+                    "filename": safe_filename,
+                    "upload_type": upload_type,
+                    "dag_synced": new_dag_root is not None
+                }
+                
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Upload transaction failed: {e}", exc_info=True)
+                raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        else:
+            # Avatar/banner upload (simpler, no DAG)
+            return {
+                "success": True,
+                "cid": cid,
+                "filename": safe_filename,
+                "upload_type": upload_type
+            }
+            
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Upload error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Upload error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Upload failed")
     finally:
-        # Always clean up temp file regardless of success or failure
+        if conn:
+            conn.close()
         if temp_path and os.path.exists(temp_path):
             try:
                 os.remove(temp_path)
@@ -1688,90 +1753,118 @@ async def sync_peers(request: Request):
     return {"success": True, "synced_peers": synced_count}
 
 @app.get("/api/feed/aggregated")
-async def get_aggregated_feed(request: Request):
-    """Get feed aggregated from own library + followed peers"""
+async def get_aggregated_feed(request: Request, limit: int = 20, offset: int = 0):
+    """Get feed aggregated from own library + followed peers with pagination"""
+    # Validate pagination parameters
+    limit = max(1, min(limit, 100))  # Clamp between 1-100
+    offset = max(0, offset)  # Non-negative offset
+    
+    logger.info(f"Fetching feed with limit={limit}, offset={offset}")
+    
     my_peer_id = get_current_did(request)
     conn = get_db_connection()
     c = conn.cursor()
     
-    # 1. Fetch my posts — include ALL fields for PostCard rendering
-    my_posts_rows = c.execute("""
-        SELECT id as cid, name, description, filename, type, author, avatar,
-               timestamp, peer_id, size, is_pinned, content, visibility, 
-               original_cid, tag
-        FROM posts
-    """).fetchall()
-    my_posts = [dict(r) for r in my_posts_rows]
+    try:
+        # 1. Fetch my posts — include ALL fields for PostCard rendering
+        my_posts_rows = c.execute("""
+            SELECT id as cid, name, description, filename, type, author, avatar,
+                   timestamp, peer_id, size, is_pinned, content, visibility, 
+                   original_cid, tag
+            FROM posts
+        """).fetchall()
+        my_posts = [dict(r) for r in my_posts_rows]
         
-    # 2. Fetch following
-    following_rows = c.execute("SELECT * FROM following WHERE user_peer_id = ?", (my_peer_id,)).fetchall()
-    following = [dict(r) for r in following_rows]
-    following_ids = [f["following_peer_id"] for f in following]
-    
-    # 3. Fetch interactions stats
-    counts_rows = c.execute("SELECT post_cid, type, COUNT(*) as count FROM interactions GROUP BY post_cid, type").fetchall()
-    interactions_map = {}
-    for r in counts_rows:
-        cid = r["post_cid"]
-        if cid not in interactions_map: interactions_map[cid] = {"likes_count": 0, "dislikes_count": 0}
-        if r["type"] == "like": interactions_map[cid]["likes_count"] = r["count"]
-        elif r["type"] == "dislike": interactions_map[cid]["dislikes_count"] = r["count"]
+        # 2. Fetch following
+        following_rows = c.execute("SELECT * FROM following WHERE user_peer_id = ?", (my_peer_id,)).fetchall()
+        following = [dict(r) for r in following_rows]
+        following_ids = [f["following_peer_id"] for f in following]
         
-    conn.close()
-    
-    all_posts = list(my_posts)
-    
-    # 4. Fetch followed content via Social DAG
-    for peer in following:
-        try:
-            peer_id = peer.get("following_peer_id")
-            # For Global Scale, we resolve the latest state from IPNS
-            # instead of relying on the 'library_cid' stored in our SQL DB
-            raw_peer_id = peer_id.replace("did:ipfs:", "") if peer_id.startswith("did:ipfs:") else peer_id
-            resolved_cid = await rpc_client.name_resolve(raw_peer_id)
-            if resolved_cid:
-                peer_library = await social_dag.traverse_feed(resolved_cid)
-                for item in peer_library:
-                    item["_from_peer"] = peer.get("username", "Unknown")
-                    item["peer_id"] = peer_id
-                all_posts.extend(peer_library)
-            elif peer.get("library_cid"):
-                # Fallback to local SQL hint if IPNS resolution fails
-                peer_library = await social_dag.traverse_feed(peer["library_cid"])
-                for item in peer_library:
-                    item["_from_peer"] = peer.get("username", "Unknown")
-                    item["peer_id"] = peer_id
-                all_posts.extend(peer_library)
-        except Exception as e:
-            pass
+        # 3. Fetch interaction counts in batch
+        all_post_cids = [p["cid"] for p in my_posts]
+        interactions_map = {}
+        if all_post_cids:
+            # Batch query instead of fetching all interactions
+            counts_rows = c.execute("""
+                SELECT post_cid, type, COUNT(*) as count 
+                FROM interactions 
+                GROUP BY post_cid, type
+            """).fetchall()
+            for r in counts_rows:
+                cid = r["post_cid"]
+                if cid not in interactions_map:
+                    interactions_map[cid] = {"likes_count": 0, "dislikes_count": 0}
+                if r["type"] == "like":
+                    interactions_map[cid]["likes_count"] = r["count"]
+                elif r["type"] == "dislike":
+                    interactions_map[cid]["dislikes_count"] = r["count"]
+        
+        conn.close()
+        
+        all_posts = list(my_posts)
+        
+        # 4. Fetch followed content via Social DAG
+        for peer in following:
+            try:
+                peer_id = peer.get("following_peer_id")
+                raw_peer_id = peer_id.replace("did:ipfs:", "") if peer_id.startswith("did:ipfs:") else peer_id
+                resolved_cid = await rpc_client.name_resolve(raw_peer_id)
+                if resolved_cid:
+                    peer_library = await social_dag.traverse_feed(resolved_cid)
+                    for item in peer_library:
+                        item["_from_peer"] = peer.get("username", "Unknown")
+                        item["peer_id"] = peer_id
+                    all_posts.extend(peer_library)
+                elif peer.get("library_cid"):
+                    peer_library = await social_dag.traverse_feed(peer["library_cid"])
+                    for item in peer_library:
+                        item["_from_peer"] = peer.get("username", "Unknown")
+                        item["peer_id"] = peer_id
+                    all_posts.extend(peer_library)
+            except Exception as e:
+                logger.warning(f"Failed to fetch feed from {peer.get('username')}: {e}")
 
-    # 5. Discovery & Privacy Filtering
-    filtered_posts = []
-    
-    for item in all_posts:
-        cid = item.get("cid")
-        item_peer_id = item.get("peer_id")
-        
-        # Privacy Check
-        item_visibility = item.get("visibility", "public")
-        is_mine = item_peer_id == my_peer_id
-        is_from_connection = item_peer_id in following_ids
-        
-        if item_visibility == "connections" and not (is_mine or is_from_connection):
-            continue
+        # 5. Privacy & Sentiment Filtering
+        filtered_posts = []
+        for item in all_posts:
+            cid = item.get("cid")
+            item_peer_id = item.get("peer_id")
             
-        # Sentiment Filtering
-        item_stats = interactions_map.get(cid, {})
-        likes = item_stats.get("likes_count", 0)
-        dislikes = item_stats.get("dislikes_count", 0)
-        
-        if dislikes > likes and not (is_mine or is_from_connection):
-            continue
+            # Privacy Check
+            item_visibility = item.get("visibility", "public")
+            is_mine = item_peer_id == my_peer_id
+            is_from_connection = item_peer_id in following_ids
             
-        filtered_posts.append(item)
+            if item_visibility == "connections" and not (is_mine or is_from_connection):
+                continue
+            
+            # Sentiment Filtering
+            item_stats = interactions_map.get(cid, {})
+            likes = item_stats.get("likes_count", 0)
+            dislikes = item_stats.get("dislikes_count", 0)
+            
+            if dislikes > likes and not (is_mine or is_from_connection):
+                continue
+            
+            filtered_posts.append(item)
 
-    filtered_posts.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-    return {"library": filtered_posts, "count": len(filtered_posts)}
+        # 6. Sort by timestamp and apply pagination
+        filtered_posts.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        total_count = len(filtered_posts)
+        paginated_posts = filtered_posts[offset:offset+limit]
+        
+        logger.info(f"Returning {len(paginated_posts)} posts out of {total_count} total")
+        return {
+            "library": paginated_posts,
+            "count": len(paginated_posts),
+            "total": total_count,
+            "offset": offset,
+            "limit": limit
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching aggregated feed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch feed")
 
 @app.get("/api/feed/recommended")
 async def get_recommended_feed(request: Request):
@@ -1853,7 +1946,7 @@ async def get_user_likes(peer_id: str):
 # ==================== Notifications ====================
 
 def create_notification(user_did: str, notif_type: str, title: str, message: str, link: str = ""):
-    """Create a notification for a user in the DB"""
+    """Create and push notification to real-time stream"""
     try:
         conn = get_db_connection()
         timestamp = datetime.now().isoformat()
@@ -1863,8 +1956,61 @@ def create_notification(user_did: str, notif_type: str, title: str, message: str
         """, (user_did, notif_type, title, message, link, timestamp))
         conn.commit()
         conn.close()
+        
+        # Push to real-time stream
+        queue = get_notification_queue(user_did)
+        try:
+            queue.put_nowait({
+                "type": notif_type,
+                "title": title,
+                "message": message,
+                "link": link,
+                "timestamp": timestamp
+            })
+        except asyncio.QueueFull:
+            logger.warning(f"Notification queue full for {user_did}")
+            
     except Exception as e:
-        print(f"create_notification error: {e}")
+        logger.error(f"create_notification error: {e}")
+
+@app.get("/api/stream")
+async def stream_notifications(request: Request):
+    """Server-Sent Events stream for real-time notifications"""
+    did = get_current_did(request)
+    
+    if did == "anonymous":
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    queue = get_notification_queue(did)
+    
+    async def event_generator():
+        try:
+            # Send initial "connected" message
+            yield f"data: {json.dumps({'type': 'connected'})}\n\n"
+            
+            while True:
+                try:
+                    # Wait for notification with 30-second heartbeat
+                    notification = await asyncio.wait_for(queue.get(), timeout=30)
+                    yield f"data: {json.dumps(notification)}\n\n"
+                except asyncio.TimeoutError:
+                    # Heartbeat
+                    yield f": heartbeat\n\n"
+        except GeneratorExit:
+            # Client disconnected
+            try:
+                queue.task_done()
+            except:
+                pass
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 @app.get("/api/notifications")
 async def get_notifications(request: Request):
@@ -1998,23 +2144,126 @@ def get_network_info():
         return {"ip": "127.0.0.1"}
 
 @app.get("/api/messages/{peer_id}")
-async def get_chat_history(peer_id: str, request: Request):
-    """Get chat history with a specific peer"""
+async def get_chat_history(peer_id: str, request: Request, limit: int = 50, offset: int = 0):
+    """Get chat history with a specific peer with pagination"""
     my_peer_id = get_current_did(request)
-    conn = get_db_connection()
     
-    query = """
-        SELECT sender_peer_id as sender, text, timestamp, cid, filename, mime_type 
-        FROM messages 
-        WHERE (sender_peer_id = ? AND receiver_peer_id = ?) 
-           OR (sender_peer_id = ? AND receiver_peer_id = ?)
-        ORDER BY timestamp ASC
-    """
-    rows = conn.execute(query, (my_peer_id, peer_id, peer_id, my_peer_id)).fetchall()
-    history = [dict(r) for r in rows]
-    conn.close()
+    # Validate parameters
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
     
-    return {"history": history}
+    logger.info(f"Fetching chat history between {my_peer_id} and {peer_id}")
+    
+    try:
+        conn = get_db_connection()
+        
+        # Get total count
+        count_query = """
+            SELECT COUNT(*) as total FROM messages 
+            WHERE (sender_peer_id = ? AND receiver_peer_id = ?) 
+               OR (sender_peer_id = ? AND receiver_peer_id = ?)
+        """
+        total = conn.execute(count_query, (my_peer_id, peer_id, peer_id, my_peer_id)).fetchone()["total"]
+        
+        # Mark messages as read for current user
+        conn.execute("""
+            UPDATE messages SET is_read = 1 
+            WHERE receiver_peer_id = ? AND sender_peer_id = ?
+        """, (my_peer_id, peer_id))
+        conn.commit()
+        
+        # Fetch messages with pagination and ordering
+        query = """
+            SELECT sender_peer_id as sender, text, timestamp, cid, filename, mime_type, is_read
+            FROM messages 
+            WHERE (sender_peer_id = ? AND receiver_peer_id = ?) 
+               OR (sender_peer_id = ? AND receiver_peer_id = ?)
+            ORDER BY timestamp DESC
+            LIMIT ? OFFSET ?
+        """
+        rows = conn.execute(query, (my_peer_id, peer_id, peer_id, my_peer_id, limit, offset)).fetchall()
+        history = [dict(r) for r in reversed(rows)]  # Reverse to get chronological order
+        conn.close()
+        
+        logger.info(f"Returning {len(history)} messages out of {total} total")
+        return {
+            "history": history,
+            "count": len(history),
+            "total": total,
+            "offset": offset,
+            "limit": limit
+        }
+    except Exception as e:
+        logger.error(f"Error fetching chat history: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch chat history")
+
+@app.post("/api/messages/{peer_id}")
+async def send_message(peer_id: str, body: dict, request: Request):
+    """Send a message to a peer"""
+    my_peer_id = get_current_did(request)
+    
+    text = body.get("text", "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Message text is required")
+    
+    logger.info(f"Sending message from {my_peer_id} to {peer_id}")
+    
+    try:
+        timestamp = datetime.now().isoformat()
+        
+        # 1. Pin message to IPFS
+        message_obj = {
+            "sender": my_peer_id,
+            "receiver": peer_id,
+            "text": text,
+            "timestamp": timestamp
+        }
+        message_json = json.dumps(message_obj)
+        cid = await rpc_client.add(message_json)
+        logger.info(f"Pinned message to IPFS: {cid}")
+        
+        # 2. Store in database
+        conn = get_db_connection()
+        conn.execute("""
+            INSERT INTO messages 
+            (sender_peer_id, receiver_peer_id, text, timestamp, cid, is_read)
+            VALUES (?, ?, ?, ?, ?, 0)
+        """, (my_peer_id, peer_id, text, timestamp, cid))
+        conn.commit()
+        conn.close()
+        logger.info(f"Stored message in database")
+        
+        # 3. Notify peer via P2P pubsub
+        inbox_topic = f"inbox:{peer_id}"
+        message_payload = {
+            "type": "message",
+            "from": my_peer_id,
+            "text": text,
+            "cid": cid,
+            "timestamp": timestamp
+        }
+        signature = sign_message(json.dumps(message_payload), my_peer_id)
+        await p2p_pubsub.publish(inbox_topic, json.dumps({
+            "payload": json.dumps(message_payload),
+            "signature": signature,
+            "did": my_peer_id
+        }))
+        logger.info(f"Published message notification to P2P pubsub")
+        
+        # 4. Trigger SSE notification
+        create_notification(
+            peer_id, 
+            "message", 
+            f"New message from {my_peer_id}", 
+            text[:50],
+            f"/messages/{my_peer_id}"
+        )
+        
+        return {"success": True, "cid": cid, "timestamp": timestamp}
+        
+    except Exception as e:
+        logger.error(f"Error sending message: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to send message: {str(e)}")
 
 # --- PubSub Background Listener ---
 
@@ -2396,7 +2645,7 @@ async def update_profile_endpoint(
             profile["banner"] = banner
 
         if updates:
-            sql = f"UPDATE users SET {\', \'.join(updates)} WHERE did = ?"
+            sql = f"UPDATE users SET {', '.join(updates)} WHERE did = ?"
             params.append(did)
             c.execute(sql, tuple(params))
 
