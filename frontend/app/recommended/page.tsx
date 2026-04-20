@@ -3,115 +3,137 @@
 import React, { useEffect, useState } from 'react';
 import PostCard from '@/components/PostCard';
 import { LibraryItem, api } from '@/lib/api';
-import { FaMagnifyingGlass, FaFire, FaListUl, FaVideo, FaFileLines, FaHeart } from 'react-icons/fa6';
-import DiscoveryGuide from '@/components/DiscoveryGuide';
+import { FaMagnifyingGlass, FaFire, FaListUl, FaVideo, FaFileLines } from 'react-icons/fa6';
+import { G, Iris, Specular } from '@/components/ui/Glass';
+
+const D = {
+    bright: 'rgba(255,255,255,0.92)',
+    mid:    'rgba(255,255,255,0.55)',
+    dim:    'rgba(255,255,255,0.30)',
+    accent: 'rgba(255,255,255,0.90)',
+    accentBg: 'rgba(255,255,255,0.13)',
+    accentBorder: 'rgba(255,255,255,0.24)',
+};
+
+const FILTERS = [
+    { id: 'all',      label: 'All',      icon: <FaListUl className="text-[10px]" /> },
+    { id: 'trending', label: 'Trending', icon: <FaFire className="text-[10px]" /> },
+    { id: 'posts',    label: 'Posts',    icon: <FaFileLines className="text-[10px]" /> },
+    { id: 'videos',   label: 'Videos',   icon: <FaVideo className="text-[10px]" /> },
+];
 
 export default function Recommended() {
-    const [library, setLibrary] = useState<LibraryItem[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [filter, setFilter] = useState<'all' | 'trending' | 'posts' | 'videos'>('all');
+    const [library, setLibrary]       = useState<LibraryItem[]>([]);
+    const [loading, setLoading]       = useState(true);
+    const [filter, setFilter]         = useState<'all' | 'trending' | 'posts' | 'videos'>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [visibleCount, setVisibleCount] = useState(10);
 
     useEffect(() => {
-        const loadRecommended = async () => {
+        const load = async () => {
             try {
-                const response = await api.get<{ library: LibraryItem[] }>('/feed/recommended');
-                setLibrary(response.data.library || []);
-            } catch (error) {
-                console.error('Failed to load recommended feed', error);
-            } finally {
-                setLoading(false);
-            }
+                const res = await api.get<{ library: LibraryItem[] }>('/feed/recommended');
+                setLibrary(res.data.library || []);
+            } catch { /* offline ok */ }
+            finally { setLoading(false); }
         };
-
-        loadRecommended();
+        load();
     }, []);
 
     const filteredLibrary = library.filter(item => {
-        if (searchQuery && !item.name.toLowerCase().includes(searchQuery.toLowerCase()) && !item.description.toLowerCase().includes(searchQuery.toLowerCase())) {
-            return false;
-        }
-
-        if (filter === 'videos') {
-            return item.filename.match(/\.(mp4|webm|mov)$/i);
-        }
-        if (filter === 'posts') {
-            return !item.filename.match(/\.(mp4|webm|mov|jpg|jpeg|png|gif|pdf)$/i);
-        }
-        // Trending logic could be refined based on recommendation count
+        const q = searchQuery.toLowerCase();
+        if (q && !item.name?.toLowerCase().includes(q) && !item.description?.toLowerCase().includes(q)) return false;
+        if (filter === 'videos')  return !!item.filename?.match(/\.(mp4|webm|mov)$/i);
+        if (filter === 'posts')   return !item.filename?.match(/\.(mp4|webm|mov|jpg|jpeg|png|gif|pdf)$/i);
         return true;
     });
 
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-[60vh]">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <div className="w-8 h-8 border-2 border-white/10 border-t-purple-500 rounded-full animate-spin" />
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col min-h-screen bg-gray-50 pb-20">
-            {/* Page Header */}
-            <div className="bg-white px-4 py-3 pb-2 flex items-center space-x-2.5">
-                <FaHeart className="text-gray-500 text-lg" />
-                <h1 className="text-lg font-bold text-gray-800">Recommended</h1>
-            </div>
+        <div className="flex flex-col min-h-screen pb-24">
 
-            {/* Search Bar */}
-            <div className="sticky top-0 z-20 bg-white px-4 py-3 border-b border-gray-100 shadow-sm">
-                <div className="relative">
-                    <FaMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-                    <input
-                        type="text"
-                        placeholder="Search recommended..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-gray-100 border-none rounded-2xl py-2.5 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all outline-none"
-                    />
+            {/* ── Sticky header ── */}
+            <div className="sticky top-0 z-30" style={{ ...G.nav, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                {/* Title */}
+                <div className="px-4 pt-3 pb-1">
+                    <h1 className="text-lg font-bold" style={{ color: D.bright }}>Recommended</h1>
                 </div>
 
-                {/* Filter Pills */}
-                <div className="flex items-center space-x-2 mt-4 overflow-x-auto no-scrollbar pb-1">
-                    {[
-                        { id: 'all', label: 'All', icon: <FaListUl /> },
-                        { id: 'trending', label: 'Trending', icon: <FaFire /> },
-                        { id: 'posts', label: 'Posts', icon: <FaFileLines /> },
-                        { id: 'videos', label: 'Videos', icon: <FaVideo /> },
-                    ].map((btn) => (
+                {/* Search */}
+                <div className="px-4 pb-2">
+                    <div
+                        className="flex items-center gap-2 px-3 py-2.5 rounded-2xl"
+                        style={{ ...G.search }}
+                    >
+                        <FaMagnifyingGlass className="shrink-0" style={{ color: D.dim, fontSize: 13 }} />
+                        <input
+                            type="text"
+                            placeholder="Search recommended…"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="flex-1 bg-transparent outline-none text-sm"
+                            style={{ color: D.bright, caretColor: D.accent }}
+                        />
+                    </div>
+                </div>
+
+                {/* Filter pills */}
+                <div className="flex items-center gap-1.5 px-4 pb-3 overflow-x-auto scrollbar-hide">
+                    {FILTERS.map(f => (
                         <button
-                            key={btn.id}
-                            onClick={() => setFilter(btn.id as any)}
-                            className={`flex items-center space-x-1.5 px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${filter === btn.id
-                                ? 'bg-primary text-white shadow-md shadow-primary/20 scale-105'
-                                : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
-                                }`}
+                            key={f.id}
+                            onClick={() => setFilter(f.id as any)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all shrink-0"
+                            style={filter === f.id ? {
+                                background: D.accentBg,
+                                border: `1px solid ${D.accentBorder}`,
+                                color: D.accent,
+                                boxShadow: '0 2px 12px rgba(255,255,255,0.08)',
+                            } : {
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid rgba(255,255,255,0.09)',
+                                color: D.dim,
+                            }}
                         >
-                            <span className="text-[10px]">{btn.icon}</span>
-                            <span>{btn.label}</span>
+                            {f.icon} {f.label}
                         </button>
                     ))}
                 </div>
             </div>
 
-            {/* Content List */}
-            <div className="flex-1 max-w-2xl mx-auto w-full mt-2">
+            {/* ── Content ── */}
+            <div className="flex-1 pt-2">
                 {filteredLibrary.length === 0 ? (
-                    <div className="px-4 py-10">
-                        <DiscoveryGuide />
+                    <div className="text-center py-20">
+                        <div className="text-4xl mb-4">✨</div>
+                        <p className="font-semibold" style={{ color: 'rgba(255,255,255,0.40)' }}>Nothing recommended yet</p>
+                        <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.22)' }}>
+                            Sync with others to see their top picks
+                        </p>
                     </div>
                 ) : (
                     <>
-                        {filteredLibrary.slice(0, visibleCount).map((item) => (
-                            <PostCard key={item.cid} item={item} />
+                        {filteredLibrary.slice(0, visibleCount).map(item => (
+                            <PostCard key={item.cid} item={item} onInteraction={() => {}} />
                         ))}
 
-                        {filteredLibrary.length > visibleCount && (
-                            <div className="p-6 text-center">
+                        {visibleCount < filteredLibrary.length && (
+                            <div className="flex justify-center py-6">
                                 <button
                                     onClick={() => setVisibleCount(c => c + 10)}
-                                    className="px-8 py-2.5 border-2 border-primary text-primary rounded-full text-sm font-bold hover:bg-primary/5 transition-colors"
+                                    className="px-6 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-95"
+                                    style={{
+                                        background: 'rgba(255,255,255,0.08)',
+                                        border: '1px solid rgba(255,255,255,0.16)',
+                                        color: D.accent,
+                                    }}
                                 >
                                     See more
                                 </button>

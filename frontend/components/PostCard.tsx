@@ -2,402 +2,309 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { FaUser, FaEllipsis, FaTrash, FaPen, FaXmark, FaCheck, FaShare, FaHeart } from 'react-icons/fa6';
-import { LibraryItem, getIPFSUrl, fetchInteractions, Interaction, deletePost, updatePost, api } from '../lib/api';
+import {
+    FaEllipsis, FaTrash, FaPen, FaXmark, FaCheck, FaShare,
+    FaFilePdf, FaFileZipper, FaFileLines, FaFileCode,
+} from 'react-icons/fa6';
+import { LibraryItem, getIPFSUrl, fetchInteractions, Interaction, deletePost, updatePost } from '../lib/api';
 import EngagementBar from './EngagementBar';
 import Comments from './Comments';
 import { useToast } from './Toast';
 import Avatar from './Avatar';
-import { FaFilePdf, FaFileZipper, FaFileLines, FaFileCode } from 'react-icons/fa6';
 import FormattedDate from './FormattedDate';
 import { G, Iris, Specular } from '@/components/ui/Glass';
+
+const D = {
+    bright: 'rgba(255,255,255,0.92)',
+    mid:    'rgba(255,255,255,0.55)',
+    dim:    'rgba(255,255,255,0.32)',
+    accent: 'rgba(255,255,255,0.70)',
+};
 
 interface PostCardProps {
     item: LibraryItem;
     interactions?: Interaction;
     onPostDeleted?: (cid: string) => void;
     onPostUpdated?: (cid: string, newTitle: string, newDescription: string) => void;
+    onInteraction?: () => void;
 }
-
-const timeAgo = (dateStr: string) => {
-    if (!dateStr) return '';
-    try {
-        const date = new Date(dateStr);
-        const now = new Date();
-        const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-        if (seconds < 60) return 'just now';
-        const minutes = Math.floor(seconds / 60);
-        if (minutes < 60) return `${minutes}m`;
-        const hours = Math.floor(minutes / 60);
-        if (hours < 24) return `${hours}h`;
-        const days = Math.floor(hours / 24);
-        if (days < 7) return `${days}d`;
-        return date.toLocaleDateString();
-    } catch (e) { return ''; }
-};
 
 const PostCard = ({ item, interactions: initialInteractions, onPostDeleted, onPostUpdated }: PostCardProps) => {
     const post = item;
     const { showToast } = useToast();
     const [showComments, setShowComments] = useState(false);
-    const [showMenu, setShowMenu] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
-    const [editTitle, setEditTitle] = useState(item.name);
-    const [editDescription, setEditDescription] = useState(item.description);
-    const [isDeleting, setIsDeleting] = useState(false);
+    const [showMenu,     setShowMenu]     = useState(false);
+    const [isEditing,    setIsEditing]    = useState(false);
+    const [editTitle,    setEditTitle]    = useState(item.name);
+    const [editDesc,     setEditDesc]     = useState(item.description);
+    const [isDeleting,   setIsDeleting]   = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
+
     const [interactions, setInteractions] = useState(initialInteractions || {
-        recommended: false,
-        not_recommended: false,
-        comments: [] as string[],
-        views: 0,
-        likes_count: 0,
-        dislikes_count: 0
+        recommended: false, not_recommended: false,
+        comments: [] as string[], views: 0, likes_count: 0, dislikes_count: 0,
     });
 
-    const isRecommended = interactions.recommended;
-
     const loadInteractions = async () => {
-        try {
-            const data = await fetchInteractions(item.cid);
-            setInteractions(data);
-        } catch (error) {
-            console.error('Failed to load interactions', error);
-        }
+        try { setInteractions(await fetchInteractions(item.cid)); } catch { /* offline ok */ }
     };
 
-    useEffect(() => {
-        loadInteractions();
-    }, [item.cid]);
+    useEffect(() => { loadInteractions(); }, [item.cid]);
 
-    // Close menu when clicking outside
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-                setShowMenu(false);
-            }
+        const handler = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false);
         };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
     }, []);
 
     const handleDelete = async () => {
-        if (!confirm('Are you sure you want to delete this post?')) return;
+        if (!confirm('Delete this post?')) return;
         setIsDeleting(true);
-        try {
-            await deletePost(item.cid);
-            onPostDeleted?.(item.cid);
-        } catch (error) {
-            console.error('Failed to delete post', error);
-            alert('Failed to delete post.');
-        } finally {
-            setIsDeleting(false);
-            setShowMenu(false);
-        }
-    };
-
-    const handleEdit = () => {
-        setIsEditing(true);
-        setShowMenu(false);
+        try { await deletePost(item.cid); onPostDeleted?.(item.cid); }
+        catch { showToast('Failed to delete post.', 'error'); }
+        finally { setIsDeleting(false); setShowMenu(false); }
     };
 
     const handleSaveEdit = async () => {
         try {
-            await updatePost(item.cid, editTitle, editDescription);
-            onPostUpdated?.(item.cid, editTitle, editDescription);
+            await updatePost(item.cid, editTitle, editDesc);
+            onPostUpdated?.(item.cid, editTitle, editDesc);
             setIsEditing(false);
-        } catch (error) {
-            console.error('Failed to update post', error);
-            alert('Failed to update post.');
-        }
+        } catch { showToast('Failed to update post.', 'error'); }
     };
 
-    const handleCancelEdit = () => {
-        setEditTitle(item.name);
-        setEditDescription(item.description);
-        setIsEditing(false);
-    };
-
-    // Ownership — only the author can edit/delete their own posts
     const isOwner = typeof window !== 'undefined' &&
         localStorage.getItem('bucks_peer_id') === (item.peer_id || item.author);
 
-    // For username synchronization: check if this is the current user
-    const [authorName, setAuthorName] = useState(item.author);
+    const [authorName,   setAuthorName]   = useState(item.author);
     const [authorAvatar, setAuthorAvatar] = useState(item.avatar);
 
     useEffect(() => {
-        const syncName = () => {
-            if (typeof window !== 'undefined') {
-                const myPeerId = localStorage.getItem('bucks_peer_id');
-                // Check if it's me
-                if (myPeerId && item.peer_id === myPeerId) {
-                    const savedProfile = localStorage.getItem('bucks_user_profile');
-                    if (savedProfile) {
-                        try {
-                            const profile = JSON.parse(savedProfile);
-                            if (profile.username && profile.username !== authorName) setAuthorName(profile.username);
-                            if (profile.avatar && profile.avatar !== authorAvatar) setAuthorAvatar(profile.avatar);
-                        } catch (e) { /* ignore */ }
-                    }
-                }
+        const sync = () => {
+            if (typeof window === 'undefined') return;
+            const myId = localStorage.getItem('bucks_peer_id');
+            if (myId && item.peer_id === myId) {
+                try {
+                    const p = JSON.parse(localStorage.getItem('bucks_user_profile') || '{}');
+                    if (p.username) setAuthorName(p.username);
+                    if (p.avatar)   setAuthorAvatar(p.avatar);
+                } catch { /* ignore */ }
             }
         };
-
-        syncName();
-        // Poll for local profile updates to keep posts in sync without full refetch
-        const interval = setInterval(syncName, 3000);
-        return () => clearInterval(interval);
+        sync();
+        const id = setInterval(sync, 3000);
+        return () => clearInterval(id);
     }, [item.peer_id]);
 
     const filename = item.filename || '';
-    const isImage = filename.match(/\.(jpg|jpeg|png|gif)$/i);
-    const isVideo = filename.match(/\.(mp4|webm|mov)$/i);
-    const ipfsUrl = getIPFSUrl(item.cid);
+    const isImage  = !!filename.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+    const isVideo  = !!filename.match(/\.(mp4|webm|mov)$/i);
+    const ipfsUrl  = getIPFSUrl(item.cid);
 
     if (isDeleting) {
         return (
-            <div
-                className="pb-2 mb-2 p-8 text-center animate-fade-in"
-                style={{ ...G.card, borderRadius: 20, marginBottom: 12, position: "relative", overflow: "hidden" }}
-            >
-                <Iris opacity={0.5} />
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-500 mx-auto mb-2"></div>
-                <p className="text-sm text-secondary">Deleting post...</p>
+            <div className="mb-3 p-8 text-center" style={{ ...G.card, borderRadius: 20 }}>
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-400 mx-auto mb-2" />
+                <p className="text-sm" style={{ color: D.dim }}>Deleting…</p>
             </div>
         );
     }
 
+    const inputCls: React.CSSProperties = {
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(255,255,255,0.10)',
+        color: D.bright,
+        borderRadius: 10,
+        width: '100%',
+        padding: '10px 14px',
+        fontSize: 13,
+        outline: 'none',
+    };
+
     return (
         <div
-            className="pb-2 mb-3 group"
-            style={{ ...G.card, borderRadius: 20, position: "relative", overflow: "hidden" }}
+            className="mb-3 overflow-hidden group"
+            style={{ ...G.card, borderRadius: 20, position: 'relative' }}
         >
-            <Iris opacity={0.5} />
+            <Iris opacity={0.4} />
             <Specular />
-            {/* Social Discovery Header */}
+
+            {/* ── Recommended-by banner ── */}
             {item.recommended_by && item.recommended_by.length > 0 && (
                 <div
-                    className="px-4 py-2 flex items-center space-x-2 mb-1"
-                    style={{ borderBottom: "1px solid rgba(255,255,255,0.55)", background: "rgba(255,255,255,0.22)" }}
+                    className="flex items-center gap-2 px-4 py-2"
+                    style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.04)' }}
                 >
-                    <div className="flex -space-x-2">
-                        {item.recommended_by.slice(0, 3).map((name, i) => (
-                            <div key={i} className="w-5 h-5 rounded-full bg-primary/10 border-2 border-white flex items-center justify-center text-[8px] font-bold text-primary">
+                    <div className="flex -space-x-1.5">
+                        {item.recommended_by.slice(0, 3).map((name: string, i: number) => (
+                            <div
+                                key={i}
+                                className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold border border-black/30"
+                                style={{ background: 'rgba(255,255,255,0.12)', color: D.accent }}
+                            >
                                 {name[0].toUpperCase()}
                             </div>
                         ))}
                     </div>
-                    <span className="text-[10px] text-gray-400 font-medium tracking-tight">
-                        Recommended by <span className="text-gray-600 font-bold">{item.recommended_by[0]}</span>
-                        {item.recommended_by.length > 1 && ` and ${item.recommended_by.length - 1} other${item.recommended_by.length > 2 ? 's' : ''}`}
+                    <span className="text-[10px]" style={{ color: D.dim }}>
+                        Recommended by{' '}
+                        <span style={{ color: D.mid, fontWeight: 600 }}>{item.recommended_by[0]}</span>
+                        {item.recommended_by.length > 1 && ` +${item.recommended_by.length - 1}`}
                     </span>
                 </div>
             )}
 
-            <div className="flex items-center justify-between px-4 py-3">
-                <div className="flex items-center space-x-3">
-                    <Link href={`/profile/${post.peer_id || post.author}`} className="relative">
-                        <Avatar src={authorAvatar} seed={post.peer_id || post.author} size="sm" className="ring-2 ring-white" />
+            {/* ── Header ── */}
+            <div className="flex items-center justify-between px-4 pt-3 pb-2">
+                <div className="flex items-center gap-3">
+                    <Link href={`/profile/${post.peer_id || post.author}`}>
+                        <Avatar src={authorAvatar} seed={post.peer_id || post.author} size="sm"
+                            className="ring-1 ring-white/10 rounded-full" />
                     </Link>
-                    <div className="flex flex-col">
-                        <div className="flex items-center space-x-2">
-                            <Link href={`/profile/${post.peer_id || post.author}`} className="font-bold text-sm text-foreground hover:underline">
-                                {authorName || 'User'}
-                            </Link>
-                            <span className="text-gray-300 text-[10px]">•</span>
-                            <FormattedDate date={post.timestamp} relative className="text-secondary text-xs" />
+                    <div>
+                        <Link
+                            href={`/profile/${post.peer_id || post.author}`}
+                            className="font-semibold text-sm hover:opacity-80 transition-opacity"
+                            style={{ color: D.bright }}
+                        >
+                            {authorName || 'User'}
+                        </Link>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                            <FormattedDate date={post.timestamp} relative className="text-[10px]" />
                         </div>
-                        {/* Optional location or handle could go here */}
                     </div>
                 </div>
 
-                <div className="flex items-center space-x-1">
-                    {/* Recommended Badge - Minimalist */}
-                    {isRecommended && (
-                        <div className="flex items-center text-[10px] font-bold text-primary bg-primary/5 px-2 py-1 rounded-full">
-                            <FaHeart className="mr-1" />
-                            <span>Rec</span>
+                {/* Menu */}
+                <div className="relative" ref={menuRef}>
+                    <button
+                        onClick={() => setShowMenu(s => !s)}
+                        className="p-2 rounded-lg transition-all active:scale-90"
+                        style={{ color: D.dim }}
+                    >
+                        <FaEllipsis />
+                    </button>
+                    {showMenu && (
+                        <div
+                            className="absolute right-0 top-9 min-w-[160px] rounded-2xl py-1.5 z-30"
+                            style={{ ...G.sheet, borderRadius: 16 }}
+                        >
+                            <button
+                                onClick={() => {
+                                    navigator.clipboard.writeText(`${window.location.origin}/feed?cid=${post.cid}`);
+                                    showToast('Post link copied!', 'success');
+                                    setShowMenu(false);
+                                }}
+                                className="flex items-center gap-3 w-full px-4 py-2.5 text-sm hover:bg-white/5 transition-colors"
+                                style={{ color: D.mid }}
+                            >
+                                <FaShare className="text-xs" /> Share Post
+                            </button>
+                            {isOwner && (
+                                <>
+                                    <button
+                                        onClick={() => { setIsEditing(true); setShowMenu(false); }}
+                                        className="flex items-center gap-3 w-full px-4 py-2.5 text-sm hover:bg-white/5 transition-colors"
+                                        style={{ color: D.mid }}
+                                    >
+                                        <FaPen className="text-xs" /> Edit Post
+                                    </button>
+                                    <button
+                                        onClick={handleDelete}
+                                        className="flex items-center gap-3 w-full px-4 py-2.5 text-sm hover:bg-red-500/10 transition-colors"
+                                        style={{ color: 'rgba(252,165,165,0.80)' }}
+                                    >
+                                        <FaTrash className="text-xs" /> Delete Post
+                                    </button>
+                                </>
+                            )}
                         </div>
                     )}
-
-                    {/* Options Menu */}
-                    <div className="relative group" ref={menuRef}>
-                        <button
-                            onClick={() => setShowMenu(!showMenu)}
-                            className="p-2 text-gray-400 hover:text-foreground transition-all active:scale-95"
-                        >
-                            <FaEllipsis />
-                        </button>
-                        {showMenu && (
-                            <div
-                                className="absolute right-0 top-10 rounded-xl py-1 min-w-[160px] z-20 animate-fade-in"
-                                style={{ ...G.sheet, borderRadius: 16 }}
-                            >
-                                <button
-                                    onClick={() => {
-                                        const shareUrl = `${window.location.origin}/feed?cid=${post.cid}`;
-                                        navigator.clipboard.writeText(shareUrl);
-                                        showToast('Post link copied to clipboard!', 'success');
-                                        setShowMenu(false);
-                                    }}
-                                    className="flex items-center space-x-3 w-full px-4 py-2.5 text-sm text-foreground hover:bg-gray-50 transition-colors"
-                                >
-                                    <FaShare className="text-xs text-secondary" />
-                                    <span>Share Post</span>
-                                </button>
-                                {isOwner && (
-                                    <>
-                                        <button
-                                            onClick={handleEdit}
-                                            className="flex items-center space-x-3 w-full px-4 py-2.5 text-sm text-foreground hover:bg-gray-50 transition-colors"
-                                        >
-                                            <FaPen className="text-xs text-secondary" />
-                                            <span>Edit Post</span>
-                                        </button>
-                                        <button
-                                            onClick={handleDelete}
-                                            className="flex items-center space-x-3 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                                        >
-                                            <FaTrash className="text-xs" />
-                                            <span>Delete Post</span>
-                                        </button>
-                                    </>
-                                )}
-                            </div>
-                        )}
-                    </div>
                 </div>
             </div>
 
-            {/* Caption / Edit Mode */}
-            <div className="px-4 mb-3">
+            {/* ── Caption ── */}
+            <div className="px-4 pb-3">
                 {isEditing ? (
                     <div className="space-y-2">
-                        <input
-                            type="text"
-                            value={editTitle}
-                            onChange={(e) => setEditTitle(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-primary"
-                            placeholder="Title"
-                        />
-                        <textarea
-                            value={editDescription}
-                            onChange={(e) => setEditDescription(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-primary resize-none"
-                            placeholder="Description"
-                            rows={2}
-                        />
-                        <div className="flex space-x-2">
+                        <input value={editTitle} onChange={e => setEditTitle(e.target.value)} style={inputCls} placeholder="Title" />
+                        <textarea value={editDesc} onChange={e => setEditDesc(e.target.value)} style={{ ...inputCls, resize: 'none' }} rows={2} placeholder="Description" />
+                        <div className="flex gap-2 pt-1">
                             <button
                                 onClick={handleSaveEdit}
-                                className="flex items-center space-x-1 px-3 py-1.5 bg-primary text-white text-xs rounded-lg font-medium hover:bg-purple-700 transition-colors"
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                                style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: D.accent }}
                             >
-                                <FaCheck />
-                                <span>Save</span>
+                                <FaCheck className="text-[10px]" /> Save
                             </button>
                             <button
-                                onClick={handleCancelEdit}
-                                className="flex items-center space-x-1 px-3 py-1.5 bg-gray-100 text-foreground text-xs rounded-lg font-medium hover:bg-gray-200 transition-colors"
+                                onClick={() => { setEditTitle(item.name); setEditDesc(item.description); setIsEditing(false); }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: D.dim }}
                             >
-                                <FaXmark />
-                                <span>Cancel</span>
+                                <FaXmark className="text-[10px]" /> Cancel
                             </button>
                         </div>
                     </div>
                 ) : (
                     <>
-                        <h4 className="font-medium text-sm mb-1">{post.name}</h4>
-                        {post.description && (
-                            <p className="text-sm text-secondary">{post.description}</p>
-                        )}
+                        {post.name && <p className="text-sm font-medium" style={{ color: D.bright }}>{post.name}</p>}
+                        {post.description && <p className="text-sm mt-0.5 leading-relaxed" style={{ color: D.mid }}>{post.description}</p>}
                     </>
                 )}
             </div>
 
-            {/* Media Area */}
-            <div className="w-full bg-black min-h-[300px] flex items-center justify-center relative overflow-hidden">
-
-
-                {/* Content (Hidden if locked, unless overlay handles z-index) */}
-                {/* We render content behind the lock so layout is preserved, but maybe hide it for security if it was text?
-                    Here it is media, so overlay is fine. */}
-
-                {isImage ? (
-                    <img
-                        src={ipfsUrl}
-                        alt={post.name}
-                        className="w-full h-auto max-h-[500px] object-contain"
-                        loading="lazy"
-                    />
-                ) : isVideo ? (
-                    <video
-                        src={ipfsUrl}
-                        controls
-                        className="w-full h-auto max-h-[500px]"
-                    />
-                ) : post.thumbnail_cid ? (
-                    <div className="relative group">
-                        <img
-                            src={getIPFSUrl(post.thumbnail_cid)}
-                            alt={post.name}
-                            className="w-full h-auto max-h-[500px] object-contain"
-                        />
-                        <div className="absolute top-4 right-4 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg">
-                            PDF
-                        </div>
-                        <a
-                            href={ipfsUrl}
-                        >
-                            <span className="bg-white text-gray-900 px-4 py-2 rounded-full text-xs font-bold shadow-xl">
+            {/* ── Media ── */}
+            {(isImage || isVideo || post.thumbnail_cid || filename) && (
+                <div className="w-full bg-black/60 flex items-center justify-center overflow-hidden" style={{ minHeight: isImage || isVideo ? 240 : 140 }}>
+                    {isImage ? (
+                        <img src={ipfsUrl} alt={post.name} className="w-full h-auto max-h-[500px] object-contain" loading="lazy" />
+                    ) : isVideo ? (
+                        <video src={ipfsUrl} controls className="w-full h-auto max-h-[500px]" />
+                    ) : post.thumbnail_cid ? (
+                        <div className="relative w-full">
+                            <img src={getIPFSUrl(post.thumbnail_cid)} alt={post.name} className="w-full h-auto max-h-[500px] object-contain" />
+                            <div className="absolute top-3 right-3 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg">PDF</div>
+                            <a href={ipfsUrl} target="_blank" rel="noopener noreferrer" className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white text-gray-900 px-4 py-2 rounded-full text-xs font-bold shadow-xl">
                                 Open Document
-                            </span>
-                        </a>
-                    </div>
-                ) : (
-                    <div className="p-12 text-center bg-gradient-to-b from-gray-900 to-black w-full border-y border-white/5">
-                        <div className="mb-4 inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl animate-pulse">
-                            {(post.filename || '').match(/\.pdf$/i) ? (
-                                <FaFilePdf className="text-red-500 text-3xl" />
-                            ) : (post.filename || '').match(/\.(zip|rar|7z|tar)$/i) ? (
-                                <FaFileZipper className="text-yellow-500 text-3xl" />
-                            ) : (post.filename || '').match(/\.(js|py|html|css|json)$/i) ? (
-                                <FaFileCode className="text-blue-500 text-3xl" />
-                            ) : (
-                                <FaFileLines className="text-primary text-3xl" />
-                            )}
+                            </a>
                         </div>
-                        <h4 className="text-white font-bold mb-3 text-sm">{post.filename || 'Unknown File'}</h4>
-                        <a
-                            href={ipfsUrl}
-                        >
-                            Download {post.type || 'File'}
-                        </a>
-                    </div>
-                )}
-            </div>
+                    ) : filename ? (
+                        <div className="p-10 text-center w-full">
+                            <div className="mb-3 inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/5 border border-white/10 shadow-xl">
+                                {filename.match(/\.pdf$/i)    ? <FaFilePdf   className="text-red-400 text-2xl" />
+                                : filename.match(/\.(zip|rar|7z|tar)$/i) ? <FaFileZipper className="text-yellow-400 text-2xl" />
+                                : filename.match(/\.(js|py|html|css|json)$/i) ? <FaFileCode  className="text-blue-400 text-2xl" />
+                                : <FaFileLines className="text-purple-400 text-2xl" />}
+                            </div>
+                            <p className="text-sm font-semibold mb-2" style={{ color: D.bright }}>{filename}</p>
+                            <a href={ipfsUrl} target="_blank" rel="noopener noreferrer"
+                                className="inline-block text-xs font-semibold px-4 py-1.5 rounded-full"
+                                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)', color: D.accent }}>
+                                Download
+                            </a>
+                        </div>
+                    ) : null}
+                </div>
+            )}
 
-            {/* Engagement */}
+            {/* ── Engagement ── */}
             <EngagementBar
                 cid={post.cid}
                 initialRecommended={interactions.recommended}
                 initialNotRecommended={interactions.not_recommended}
                 commentsCount={interactions.comments.length}
-                onCommentClick={() => setShowComments(!showComments)}
+                onCommentClick={() => setShowComments(s => !s)}
                 likes_count={interactions.likes_count}
                 dislikes_count={interactions.dislikes_count}
-                onInteractionUpdate={(newInteractions: any) => {
-                    setInteractions(prev => ({ ...prev, ...newInteractions }));
-                }}
+                onInteractionUpdate={u => setInteractions(p => ({ ...p, ...u }))}
             />
 
-            {/* Comments */}
+            {/* ── Comments ── */}
             {showComments && (
-                <Comments
-                    cid={item.cid}
-                    comments={interactions.comments}
-                    onCommentAdded={loadInteractions}
-                />
+                <Comments cid={item.cid} comments={interactions.comments} onCommentAdded={loadInteractions} />
             )}
         </div>
     );

@@ -151,11 +151,17 @@ def init_db():
         # ── Migrations MUST run before indexes that reference new columns ──────
         # (CREATE TABLE IF NOT EXISTS is a no-op on existing tables, so columns
         #  added after initial deploy need ALTER TABLE.)
-        for col, coltype in [("secret_key", "TEXT"), ("dag_root", "TEXT"), ("uuid7", "TEXT")]:
+        for col, coltype in [("secret_key", "TEXT"), ("dag_root", "TEXT"), ("uuid7", "TEXT"), ("media_type", "TEXT")]:
             try:
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} {coltype}")
             except Exception:
                 pass  # column already exists — fine
+        
+        # Add media_type to posts table (image, video, file, text)
+        try:
+            c.execute("ALTER TABLE posts ADD COLUMN media_type TEXT DEFAULT 'file'")
+        except Exception:
+            pass  # column already exists — fine
 
         # Now safe to create indexes on columns guaranteed to exist
         c.execute("CREATE INDEX IF NOT EXISTS idx_users_uuid7 ON users(uuid7);")
@@ -203,6 +209,8 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 sender_peer_id TEXT,
                 receiver_peer_id TEXT,
+                sender_uuid7 TEXT,
+                receiver_uuid7 TEXT,
                 text TEXT,
                 timestamp TEXT,
                 cid TEXT,
@@ -282,7 +290,7 @@ def init_db():
         """)
 
         # Lightweight SQLite migrations for older DBs (messages + following)
-        for col, coltype in [("filename", "TEXT"), ("mime_type", "TEXT")]:
+        for col, coltype in [("filename", "TEXT"), ("mime_type", "TEXT"), ("sender_uuid7", "TEXT"), ("receiver_uuid7", "TEXT")]:
             try:
                 c.execute(f"ALTER TABLE messages ADD COLUMN {col} {coltype}")
             except Exception:
@@ -342,6 +350,13 @@ def init_db():
                 conn.commit()  # commit each migration so subsequent ones see the column
             except Exception:
                 pass  # column already exists — fine
+        
+        # Add media_type to posts table for both SQLite and Postgres
+        try:
+            c.execute("ALTER TABLE posts ADD COLUMN media_type TEXT DEFAULT 'file'")
+            conn.commit()
+        except Exception:
+            pass  # column already exists — fine
         c.execute("CREATE INDEX IF NOT EXISTS idx_users_uuid7 ON users(uuid7);")
 
         c.execute("""
@@ -385,6 +400,8 @@ def init_db():
                 id BIGSERIAL PRIMARY KEY,
                 sender_peer_id TEXT,
                 receiver_peer_id TEXT,
+                sender_uuid7 TEXT,
+                receiver_uuid7 TEXT,
                 text TEXT,
                 timestamp TEXT,
                 cid TEXT,
@@ -462,6 +479,14 @@ def init_db():
                 discovery_type TEXT
             );
         """)
+
+        # ── Postgres migrations (ALTER TABLE for existing tables) ──
+        for col, coltype in [("sender_uuid7", "TEXT"), ("receiver_uuid7", "TEXT")]:
+            try:
+                c.execute(f"ALTER TABLE messages ADD COLUMN {col} {coltype}")
+                conn.commit()
+            except Exception:
+                pass  # column already exists — fine
 
     conn.commit()
     conn.close()

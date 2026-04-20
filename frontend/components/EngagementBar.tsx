@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { FaArrowUp, FaArrowDown, FaRegComment, FaShare } from 'react-icons/fa6';
+import { FaArrowUp, FaArrowDown, FaRegComment, FaArrowUpFromBracket } from 'react-icons/fa6';
 import { toggleLike, toggleDislike } from '../lib/api';
 
 interface EngagementBarProps {
@@ -10,7 +10,20 @@ interface EngagementBarProps {
     initialNotRecommended: boolean;
     commentsCount: number;
     onCommentClick: () => void;
+    likes_count?: number;
+    dislikes_count?: number;
+    onInteractionUpdate?: (updates: any) => void;
 }
+
+const D = {
+    dim: 'rgba(255,255,255,0.35)',
+    mid: 'rgba(255,255,255,0.55)',
+    up:  'rgba(110,231,183,0.90)',   // emerald
+    upBg: 'rgba(52,211,153,0.12)',
+    down: 'rgba(252,165,165,0.90)',  // rose
+    downBg: 'rgba(248,113,113,0.12)',
+    purple: 'rgba(155,63,255,0.80)',
+};
 
 const EngagementBar = ({
     cid,
@@ -19,131 +32,117 @@ const EngagementBar = ({
     commentsCount,
     onCommentClick,
     onInteractionUpdate,
-    likes_count = 0,
-    dislikes_count = 0
-}: EngagementBarProps & { likes_count?: number; dislikes_count?: number; onInteractionUpdate?: (updates: any) => void }) => {
-    const [recommended, setRecommended] = useState(initialRecommended);
+    likes_count    = 0,
+    dislikes_count = 0,
+}: EngagementBarProps) => {
+    const [recommended,    setRecommended]    = useState(initialRecommended);
     const [notRecommended, setNotRecommended] = useState(initialNotRecommended);
-    const [likesCount, setLikesCount] = useState(likes_count);
-    const [dislikesCount, setDislikesCount] = useState(dislikes_count);
+    const [likesCount,     setLikesCount]     = useState(likes_count);
+    const [dislikesCount,  setDislikesCount]  = useState(dislikes_count);
 
     const handleLike = async () => {
-        // Snapshot current state for full revert on error
-        const prevRecommended = recommended;
-        const prevNotRecommended = notRecommended;
-        const prevLikesCount = likesCount;
-        const prevDislikesCount = dislikesCount;
-
-        // Optimistic update
-        const newRecommended = !recommended;
-        setRecommended(newRecommended);
-        setLikesCount(prev => newRecommended ? prev + 1 : prev - 1);
-
-        const clearedDislike = newRecommended && notRecommended;
-        if (clearedDislike) {
-            setNotRecommended(false);
-            setDislikesCount(prev => prev - 1);
-        }
-
+        const prev = { recommended, notRecommended, likesCount, dislikesCount };
+        const next = !recommended;
+        setRecommended(next);
+        setLikesCount(c => next ? c + 1 : c - 1);
+        if (next && notRecommended) { setNotRecommended(false); setDislikesCount(c => c - 1); }
         try {
             await toggleLike(cid);
             onInteractionUpdate?.({
-                recommended: newRecommended,
-                not_recommended: clearedDislike ? false : notRecommended,
-                likes_count: newRecommended ? prevLikesCount + 1 : prevLikesCount - 1,
-                dislikes_count: clearedDislike ? prevDislikesCount - 1 : prevDislikesCount,
+                recommended: next,
+                not_recommended: next && prev.notRecommended ? false : prev.notRecommended,
+                likes_count: next ? prev.likesCount + 1 : prev.likesCount - 1,
+                dislikes_count: next && prev.notRecommended ? prev.dislikesCount - 1 : prev.dislikesCount,
             });
-        } catch (error) {
-            // Full revert — restore all affected state
-            console.error('Failed to like', error);
-            setRecommended(prevRecommended);
-            setNotRecommended(prevNotRecommended);
-            setLikesCount(prevLikesCount);
-            setDislikesCount(prevDislikesCount);
+        } catch {
+            setRecommended(prev.recommended); setNotRecommended(prev.notRecommended);
+            setLikesCount(prev.likesCount);   setDislikesCount(prev.dislikesCount);
         }
     };
 
     const handleDislike = async () => {
-        // Snapshot current state for full revert on error
-        const prevRecommended = recommended;
-        const prevNotRecommended = notRecommended;
-        const prevLikesCount = likesCount;
-        const prevDislikesCount = dislikesCount;
-
-        const newNotRecommended = !notRecommended;
-        setNotRecommended(newNotRecommended);
-        setDislikesCount(prev => newNotRecommended ? prev + 1 : prev - 1);
-
-        const clearedLike = newNotRecommended && recommended;
-        if (clearedLike) {
-            setRecommended(false);
-            setLikesCount(prev => prev - 1);
-        }
-
+        const prev = { recommended, notRecommended, likesCount, dislikesCount };
+        const next = !notRecommended;
+        setNotRecommended(next);
+        setDislikesCount(c => next ? c + 1 : c - 1);
+        if (next && recommended) { setRecommended(false); setLikesCount(c => c - 1); }
         try {
             await toggleDislike(cid);
             onInteractionUpdate?.({
-                recommended: clearedLike ? false : recommended,
-                not_recommended: newNotRecommended,
-                likes_count: clearedLike ? prevLikesCount - 1 : prevLikesCount,
-                dislikes_count: newNotRecommended ? prevDislikesCount + 1 : prevDislikesCount - 1,
+                recommended: next && prev.recommended ? false : prev.recommended,
+                not_recommended: next,
+                likes_count: next && prev.recommended ? prev.likesCount - 1 : prev.likesCount,
+                dislikes_count: next ? prev.dislikesCount + 1 : prev.dislikesCount - 1,
             });
-        } catch (error) {
-            console.error('Failed to dislike', error);
-            setRecommended(prevRecommended);
-            setNotRecommended(prevNotRecommended);
-            setLikesCount(prevLikesCount);
-            setDislikesCount(prevDislikesCount);
+        } catch {
+            setRecommended(prev.recommended); setNotRecommended(prev.notRecommended);
+            setLikesCount(prev.likesCount);   setDislikesCount(prev.dislikesCount);
         }
     };
 
-    return (
-        <div className="flex items-center justify-between py-2 px-4 mt-1">
-            <div className="flex items-center space-x-4">
-                {/* Like / Vote Actions */}
-                <div className="flex items-center space-x-1">
-                    <button
-                        onClick={handleLike}
-                        className={`flex items-center justify-center w-8 h-8 rounded-full transition-transform active:scale-95 ${recommended
-                            ? 'text-green-600'
-                            : 'text-gray-800 hover:text-green-600'
-                            }`}
-                    >
-                        <FaArrowUp className="text-xl" />
-                    </button>
-                    {(likesCount > 0 || dislikesCount > 0) && (
-                        <span className="text-sm font-bold min-w-[1ch] text-center">{likesCount - dislikesCount}</span>
-                    )}
-                    <button
-                        onClick={handleDislike}
-                        className={`flex items-center justify-center w-8 h-8 rounded-full transition-transform active:scale-95 ${notRecommended
-                            ? 'text-red-500'
-                            : 'text-gray-800 hover:text-red-500'
-                            }`}
-                    >
-                        <FaArrowDown className="text-xl" />
-                    </button>
-                </div>
+    const handleShare = () => {
+        const shareUrl = `${window.location.origin}/feed?cid=${cid}`;
+        navigator.clipboard.writeText(shareUrl).catch(() => {});
+    };
 
-                {/* Comment Action */}
+    return (
+        <div className="flex items-center justify-between px-4 py-3">
+            {/* Vote cluster */}
+            <div className="flex items-center gap-1">
+                {/* Up */}
                 <button
-                    onClick={onCommentClick}
-                    className="flex items-center justify-center w-8 h-8 rounded-full text-gray-800 hover:text-primary transition-all active:scale-95"
+                    onClick={handleLike}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full transition-all active:scale-90"
+                    style={{
+                        background: recommended ? D.upBg : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${recommended ? 'rgba(52,211,153,0.30)' : 'rgba(255,255,255,0.08)'}`,
+                    }}
                 >
-                    <FaRegComment className="text-xl" />
+                    <FaArrowUp className="text-xs" style={{ color: recommended ? D.up : D.dim }} />
+                    {likesCount > 0 && (
+                        <span className="text-[11px] font-bold" style={{ color: recommended ? D.up : D.dim }}>
+                            {likesCount}
+                        </span>
+                    )}
                 </button>
 
-                {/* Share Action */}
+                {/* Down */}
                 <button
-                    onClick={() => {
-                        const shareUrl = `${window.location.origin}/feed?cid=${cid}`;
-                        navigator.clipboard.writeText(shareUrl)
-                            .then(() => alert('Link copied!'))
-                            .catch(() => prompt('Copy link:', shareUrl));
+                    onClick={handleDislike}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full transition-all active:scale-90"
+                    style={{
+                        background: notRecommended ? D.downBg : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${notRecommended ? 'rgba(248,113,113,0.30)' : 'rgba(255,255,255,0.08)'}`,
                     }}
-                    className="flex items-center justify-center w-8 h-8 rounded-full text-gray-800 hover:text-primary transition-all active:scale-95"
                 >
-                    <FaShare className="text-xl" />
+                    <FaArrowDown className="text-xs" style={{ color: notRecommended ? D.down : D.dim }} />
+                    {dislikesCount > 0 && (
+                        <span className="text-[11px] font-bold" style={{ color: notRecommended ? D.down : D.dim }}>
+                            {dislikesCount}
+                        </span>
+                    )}
+                </button>
+            </div>
+
+            {/* Comments + Share */}
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={onCommentClick}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full transition-all active:scale-90"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                >
+                    <FaRegComment className="text-xs" style={{ color: D.dim }} />
+                    {commentsCount > 0 && (
+                        <span className="text-[11px] font-bold" style={{ color: D.dim }}>{commentsCount}</span>
+                    )}
+                </button>
+
+                <button
+                    onClick={handleShare}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full transition-all active:scale-90"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                >
+                    <FaArrowUpFromBracket className="text-xs" style={{ color: D.dim }} />
                 </button>
             </div>
         </div>

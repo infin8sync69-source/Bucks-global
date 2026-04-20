@@ -62,6 +62,32 @@ def get_notification_queue(did: str) -> asyncio.Queue:
         notification_queues[did] = asyncio.Queue(maxsize=100)
     return notification_queues[did]
 
+def classify_media_type(filename: str) -> str:
+    """Classify file by extension into: image, video, audio, file, text"""
+    if not filename:
+        return "file"
+    
+    filename_lower = filename.lower()
+    
+    # Image extensions
+    if filename_lower.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.ico')):
+        return "image"
+    
+    # Video extensions
+    if filename_lower.endswith(('.mp4', '.webm', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.m4v')):
+        return "video"
+    
+    # Audio extensions  
+    if filename_lower.endswith(('.mp3', '.wav', '.aac', '.flac', '.ogg', '.wma', '.m4a')):
+        return "audio"
+    
+    # Text extensions
+    if filename_lower.endswith(('.txt', '.md', '.doc', '.docx', '.pdf', '.rtf', '.odt')):
+        return "text"
+    
+    # Default
+    return "file"
+
 def _env_int(key: str, default: int) -> int:
     try:
         return int(os.getenv(key, str(default)))
@@ -835,9 +861,6 @@ async def search_library(request: Request):
     
     return {"results": post_results + user_results, "count": len(post_results) + len(user_results)}
     
-    # Combine (Users first?)
-    combined = user_results + post_results
-    
     return {"results": combined, "count": len(combined), "query": query}
 
 @app.get("/api/library/{cid}")
@@ -961,7 +984,8 @@ async def upload_file(
                 else:
                     user_profile = dict(user_profile)
                 
-                # Create entry
+                # Create entry with media type classification
+                media_type = classify_media_type(safe_filename)
                 entry_dict = {
                     "name": title or safe_filename,
                     "description": description,
@@ -969,6 +993,7 @@ async def upload_file(
                     "cid": cid,
                     "thumbnail_cid": thumbnail_cid,
                     "type": "file",
+                    "media_type": media_type,
                     "author": user_profile.get("username", "Anonymous"),
                     "avatar": user_profile.get("avatar", ""),
                     "peer_id": did,
@@ -978,14 +1003,15 @@ async def upload_file(
                 
                 # ── Phase 1: Write to SQL ────────────────────────────────
                 c.execute("""
-                    INSERT INTO posts (id, name, description, filename, type, author, avatar, timestamp, peer_id, visibility)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO posts (id, name, description, filename, type, media_type, author, avatar, timestamp, peer_id, visibility)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     entry_dict["cid"],
                     entry_dict["name"],
                     entry_dict["description"],
                     entry_dict["filename"],
                     entry_dict["type"],
+                    entry_dict["media_type"],
                     entry_dict["author"],
                     entry_dict["avatar"],
                     entry_dict["timestamp"],
@@ -1249,11 +1275,17 @@ async def get_post_interactions(cid: str, request: Request):
     my_like = conn.execute("SELECT 1 FROM interactions WHERE post_cid = ? AND user_peer_id = ? AND type = 'like'", (cid, peer_id)).fetchone()
     my_dislike = conn.execute("SELECT 1 FROM interactions WHERE post_cid = ? AND user_peer_id = ? AND type = 'dislike'", (cid, peer_id)).fetchone()
     
-    # Comments
+    # Comments - return full metadata (user info + timestamp)
     comments_rows = conn.execute("SELECT * FROM comments WHERE post_cid = ?", (cid,)).fetchall()
-    comments = [c["text"] for c in comments_rows] # Frontend expects list of strings currently? Or objects? 
-                                                  # Checking original: "comments": [text, text...]
-                                                  # Original save_comment: interactions[cid]["comments"].append(comment.text) -> YES list of strings.
+    comments = [
+        {
+            "text": c["text"],
+            "user": c["username"],
+            "user_peer_id": c["user_peer_id"],
+            "timestamp": c["timestamp"]
+        }
+        for c in comments_rows
+    ]
     
     conn.close()
     
@@ -1649,28 +1681,17 @@ async def get_connections(request: Request):
 
 @app.get("/api/following")
 async def get_following(request: Request):
-    """Get list of peers being followed"""
+    """Get list of peers being followed with their profile data"""
     my_peer_id = get_current_did(request)
     conn = get_db_connection()
-    # Fetch full details?
-    # Original 'following' list had metadata like 'username', 'last_synced'.
-    # Our DB only has 'following_peer_id', 'timestamp'.
-    # We might need to fetch profile info from 'users' table if we stored it?
-    # Or 'users' table only stores OUR profile?
-    # Schema for 'users' is for the local user profile usually, but maybe we should store other users there too?
-    # The 'users' table has 'peer_id' unique. 
-    # Let's assume we store discovered users there?
-    # If not, we just return peer_ids and client fetches profile?
-    # Or for MVP just return simple list. 
-    # Front-end expects array of objects.
     
-    rows = conn.execute("SELECT following_peer_id, timestamp, relationship_type FROM following WHERE user_peer_id = ?", (my_peer_id,)).fetchall()
+    rows = conn.execute("SELECT following_peer_id, timestamp, relationship_type, username FROM following WHERE user_peer_id = ?", (my_peer_id,)).fetchall()
     
     following_list = []
     for r in rows:
         following_list.append({
             "peer_id": r["following_peer_id"],
-            "username": "Unknown", # We'd need to fetch this or store it in 'following' table?
+            "username": r["username"] or "Unknown",
             "relationship_type": r["relationship_type"],
             "followed_at": r["timestamp"]
         })
@@ -2540,24 +2561,7 @@ async def get_profile(request: Request):
         }
     return dict(user)
 
-@app.get("/api/network-info")
-async def get_network_info():
-    """Get the host's LAN IP address"""
-    try:
-        # Get host LAN IP
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(0)
-        try:
-            # doesn't even have to be reachable
-            s.connect(('10.254.254.254', 1))
-            ip = s.getsockname()[0]
-        except Exception:
-            ip = '127.0.0.1'
-        finally:
-            s.close()
-        return {"ip": ip, "port": 3000}
-    except Exception as e:
-        return {"error": str(e), "ip": "127.0.0.1"}
+# REMOVED: Duplicate endpoint - use L2133 version instead
 
 @app.post("/api/profile")
 async def update_profile_endpoint(
@@ -2713,6 +2717,13 @@ async def setup_recovery(threshold: int = Form(3), shares: int = Form(5), reques
     Generate SSSS shards for the current user's secret key.
     User must securely distribute these to guardians.
     """
+    # Validate SSSS parameters
+    if threshold <= 0 or shares <= 0 or threshold > shares or shares > 7:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid SSSS parameters: threshold must be 1-7, shares >= threshold and <= 7"
+        )
+    
     # Verify auth by getting current user's secret
     did = request.headers.get("X-DID")
     if not did:
@@ -3007,11 +3018,11 @@ async def chat_history(peer_uuid7: str, request: Request):
 
     rows = conn.execute(
         """
-        SELECT sender_peer_id as sender, receiver_peer_id as receiver,
+        SELECT sender_uuid7, receiver_uuid7, sender_peer_id, receiver_peer_id,
                text, timestamp, is_read
         FROM messages
-        WHERE (sender_peer_id = ? AND receiver_peer_id = ?)
-           OR (sender_peer_id = ? AND receiver_peer_id = ?)
+        WHERE (sender_uuid7 = ? AND receiver_uuid7 = ?)
+           OR (sender_uuid7 = ? AND receiver_uuid7 = ?)
         ORDER BY timestamp ASC
         """,
         (my_uuid7, peer_uuid7, peer_uuid7, my_uuid7),
@@ -3019,7 +3030,7 @@ async def chat_history(peer_uuid7: str, request: Request):
 
     # Mark incoming messages as read
     conn.execute(
-        "UPDATE messages SET is_read = 1 WHERE receiver_peer_id = ? AND sender_peer_id = ?",
+        "UPDATE messages SET is_read = 1 WHERE receiver_uuid7 = ? AND sender_uuid7 = ?",
         (my_uuid7, peer_uuid7),
     )
     conn.commit()
@@ -3053,7 +3064,7 @@ async def chat_send(peer_uuid7: str, body: ChatMessageBody, request: Request):
     timestamp = datetime.now().isoformat()
     conn.execute(
         """
-        INSERT INTO messages (sender_peer_id, receiver_peer_id, text, timestamp, is_read)
+        INSERT INTO messages (sender_uuid7, receiver_uuid7, text, timestamp, is_read)
         VALUES (?, ?, ?, ?, 0)
         """,
         (my_uuid7, peer_uuid7, text, timestamp),
