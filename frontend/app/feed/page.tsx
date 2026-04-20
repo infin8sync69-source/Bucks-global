@@ -148,9 +148,12 @@ function FeedContent() {
         <div className="relative">
           <button
             onClick={() => setShowFilterMenu(!showFilterMenu)}
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase border transition-all ${showFilterMenu || source !== 'global' || sortBy !== 'newest'
-              ? 'bg-primary/5 border-primary text-primary shadow-sm'
-              : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+            className="flex items-center space-x-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all"
+          style={showFilterMenu || source !== 'global' || sortBy !== 'newest' ? {
+            background: 'rgba(155,63,255,0.18)',
+            border: '1px solid rgba(155,63,255,0.35)',
+            color: 'rgba(155,63,255,0.90)',
+          } : { ...G.btn, color: 'rgba(255,255,255,0.38)' }}
           >
             <FaFilter className="text-[10px]" />
             <span>Filter</span>
@@ -164,8 +167,8 @@ function FeedContent() {
                 className="absolute right-0 mt-2 w-56 rounded-2xl py-2 z-50"
                 style={{ ...G.sheet, borderRadius: 16 }}
               >
-                <div className="px-4 py-2 border-b border-gray-50">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Feed Source</span>
+                <div className="px-4 py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.30)' }}>Feed Source</span>
                   <div className="flex flex-col mt-2 space-y-1">
                     {[
                       { id: 'global', icon: <FaEarthAmericas />, label: 'Global Swarm' },
@@ -174,20 +177,21 @@ function FeedContent() {
                       <button
                         key={s.id}
                         onClick={() => { setSource(s.id as any); setShowFilterMenu(false); }}
-                        className="flex items-center justify-between px-2 py-1.5 rounded-lg text-sm hover:bg-gray-50 text-gray-700 transition-colors"
+                        className="flex items-center justify-between px-2 py-1.5 rounded-lg text-sm transition-colors"
+                        style={{ color: source === s.id ? 'rgba(155,63,255,0.90)' : 'rgba(255,255,255,0.55)' }}
                       >
                         <div className="flex items-center space-x-2">
-                          <span className={source === s.id ? 'text-primary' : 'text-gray-400'}>{s.icon}</span>
+                          <span>{s.icon}</span>
                           <span className={source === s.id ? 'font-bold' : ''}>{s.label}</span>
                         </div>
-                        {source === s.id && <FaCheck className="text-primary text-[10px]" />}
+                        {source === s.id && <FaCheck className="text-[10px]" />}
                       </button>
                     ))}
                   </div>
                 </div>
 
                 <div className="px-4 py-2">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sort By</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.30)' }}>Sort By</span>
                   <div className="flex flex-col mt-2 space-y-1">
                     {[
                       { id: 'newest', icon: <FaArrowDownShortWide />, label: 'Latest First' },
@@ -196,13 +200,14 @@ function FeedContent() {
                       <button
                         key={s.id}
                         onClick={() => { setSortBy(s.id as any); setShowFilterMenu(false); }}
-                        className="flex items-center justify-between px-2 py-1.5 rounded-lg text-sm hover:bg-gray-50 text-gray-700 transition-colors"
+                        className="flex items-center justify-between px-2 py-1.5 rounded-lg text-sm transition-colors"
+                        style={{ color: sortBy === s.id ? 'rgba(155,63,255,0.90)' : 'rgba(255,255,255,0.55)' }}
                       >
                         <div className="flex items-center space-x-2">
-                          <span className={sortBy === s.id ? 'text-primary' : 'text-gray-400'}>{s.icon}</span>
+                          <span>{s.icon}</span>
                           <span className={sortBy === s.id ? 'font-bold' : ''}>{s.label}</span>
                         </div>
-                        {sortBy === s.id && <FaCheck className="text-primary text-[10px]" />}
+                        {sortBy === s.id && <FaCheck className="text-[10px]" />}
                       </button>
                     ))}
                   </div>
@@ -215,13 +220,14 @@ function FeedContent() {
 
       <div className="flex-1">
         {(filterCid || filterAuthor) && (
-          <div className="px-4 py-2 bg-purple-50 flex items-center justify-between border-b border-purple-100">
-            <span className="text-xs font-medium text-primary">
+          <div className="px-4 py-2 flex items-center justify-between" style={{ background: 'rgba(155,63,255,0.08)', borderBottom: '1px solid rgba(155,63,255,0.15)' }}>
+            <span className="text-xs font-medium" style={{ color: 'rgba(155,63,255,0.80)' }}>
               Showing {filterCid ? 'selected post' : `posts by ${filterAuthor}`}
             </span>
             <button
               onClick={() => { window.history.replaceState(null, '', '/feed'); window.location.reload(); }}
-              className="text-[10px] font-bold text-primary uppercase"
+              className="text-[10px] font-bold uppercase"
+              style={{ color: 'rgba(155,63,255,0.80)' }}
             >
               Clear Filter
             </button>
@@ -242,13 +248,14 @@ function FeedContent() {
         )}
 
         {filteredLibrary.length === 0 && !backendOffline ? (
-          <div className="text-center py-20 bg-white m-4 rounded-3xl border border-dashed border-gray-200">
+          <div className="text-center py-20 mx-4 rounded-3xl" style={{ border: '1px dashed rgba(255,255,255,0.10)' }}>
             <div className="text-4xl mb-4">🛸</div>
-            <h3 className="text-gray-900 font-bold">No content found</h3>
-            <p className="text-gray-400 text-sm mt-1">Try adjusting your filters or source.</p>
+            <h3 className="font-bold" style={{ color: 'rgba(255,255,255,0.60)' }}>No content found</h3>
+            <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.30)' }}>Try adjusting your filters or source.</p>
             <button
               onClick={() => { setFilterType('all'); setSource('global'); setSortBy('newest'); }}
-              className="mt-6 text-primary text-xs font-bold uppercase tracking-widest hover:underline"
+              className="mt-6 text-xs font-bold uppercase tracking-widest"
+              style={{ color: 'rgba(155,63,255,0.75)' }}
             >
               Reset all filters
             </button>

@@ -1,76 +1,69 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FaArrowLeft, FaXmark, FaCheck, FaGlobe, FaUserGroup, FaImage } from 'react-icons/fa6';
+import {
+    FaXmark, FaGlobe, FaUserGroup, FaImage, FaVideo,
+    FaFileLines, FaArrowUp, FaLocationDot,
+} from 'react-icons/fa6';
 import { uploadFile } from '@/lib/api';
+import { G, Iris, Specular } from '@/components/ui/Glass';
+import { getIdentity } from '@/lib/identity';
 
-export default function Upload() {
+const D = {
+    bright: 'rgba(255,255,255,0.92)',
+    mid:    'rgba(255,255,255,0.55)',
+    dim:    'rgba(255,255,255,0.30)',
+    purple: 'rgba(155,63,255,0.90)',
+    purpleBg: 'rgba(155,63,255,0.15)',
+    purpleBorder: 'rgba(155,63,255,0.30)',
+};
+
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+function CreateContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const isStory = searchParams?.get('type') === 'story';
-    const [step, setStep] = useState(1); // 1: Select, 2: Compose
-    const [file, setFile] = useState<File | null>(null);
-    const [caption, setCaption] = useState('');
-    const [visibility, setVisibility] = useState<'public' | 'connections'>('public');
+
+    const [file, setFile]               = useState<File | null>(null);
+    const [caption, setCaption]         = useState('');
+    const [visibility, setVisibility]   = useState<'public' | 'connections'>('public');
     const [isUploading, setIsUploading] = useState(false);
-    const [error, setError] = useState('');
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [error, setError]             = useState('');
+    const [previewUrl, setPreviewUrl]   = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+    const identity = typeof window !== 'undefined' ? getIdentity() : null;
 
-    const applyFile = (selectedFile: File) => {
-        if (selectedFile.size > MAX_FILE_SIZE) {
-            setError('File is too large. Maximum size is 50 MB.');
-            return;
-        }
-        // Revoke any existing object URL before creating a new one
-        if (previewUrl) {
-            URL.revokeObjectURL(previewUrl);
-        }
-        setFile(selectedFile);
+    const applyFile = (f: File) => {
+        if (f.size > MAX_FILE_SIZE) { setError('File too large. Max 50 MB.'); return; }
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        setFile(f);
         setError('');
-        if (selectedFile.type.startsWith('image/') || selectedFile.type.startsWith('video/')) {
-            setPreviewUrl(URL.createObjectURL(selectedFile));
+        if (f.type.startsWith('image/') || f.type.startsWith('video/')) {
+            setPreviewUrl(URL.createObjectURL(f));
         } else {
             setPreviewUrl(null);
         }
-        setStep(2);
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            applyFile(e.target.files[0]);
-        }
+        if (e.target.files?.[0]) applyFile(e.target.files[0]);
     };
 
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            applyFile(e.dataTransfer.files[0]);
-        }
-    };
-
-    const clearFile = () => {
-        if (previewUrl) {
-            URL.revokeObjectURL(previewUrl);
-        }
-        setFile(null);
-        setPreviewUrl(null);
-        setError('');
-        setStep(1);
+        if (e.dataTransfer.files?.[0]) applyFile(e.dataTransfer.files[0]);
     };
 
     const handleSubmit = async () => {
-        if (!file) return;
-
+        if (!caption.trim() && !file) return;
         setIsUploading(true);
         setError('');
 
         const formData = new FormData();
-        formData.append('file', file);
-        // Use caption as title to support legacy backend, description empty for now
+        if (file) formData.append('file', file);
         formData.append('title', caption || 'Untitled Post');
         formData.append('description', caption);
         formData.append('visibility', visibility);
@@ -78,154 +71,204 @@ export default function Upload() {
         try {
             await uploadFile(formData);
             router.push('/feed');
-        } catch (err) {
-            console.error('Upload failed', err);
-            setError('Failed to upload file. Please try again.');
+        } catch {
+            setError('Failed to post. Please try again.');
             setIsUploading(false);
         }
     };
 
-    // --- STEP 1: MEDIA SELECTION ---
-    if (step === 1) {
-        return (
+    const isImage = file?.type.startsWith('image/');
+    const isVideo = file?.type.startsWith('video/');
+
+    return (
+        <div
+            className="min-h-screen flex flex-col items-center justify-end md:justify-center px-0 pb-0"
+            onDragOver={e => e.preventDefault()}
+            onDrop={handleDrop}
+        >
+            {/* ── Bottom-sheet card ── */}
             <div
-                className="min-h-screen bg-white flex flex-col items-center justify-center p-6 relative"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleDrop}
+                className="w-full max-w-lg relative overflow-hidden"
+                style={{
+                    ...G.sheet,
+                    borderRadius: '28px 28px 0 0',
+                    borderTop: '1px solid rgba(255,255,255,0.12)',
+                    borderLeft: '1px solid rgba(255,255,255,0.09)',
+                    borderRight: '1px solid rgba(255,255,255,0.09)',
+                    borderBottom: 'none',
+                    minHeight: '60vh',
+                    paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)',
+                }}
             >
-                {/* Cancel / Back button */}
-                <button
-                    onClick={() => router.back()}
-                    className="absolute top-4 left-4 p-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
-                    aria-label="Cancel"
-                >
-                    <FaXmark className="text-lg" />
-                </button>
+                <Specular />
+                <Iris opacity={0.3} />
 
-                <div className="text-center space-y-6 max-w-sm w-full animate-in fade-in zoom-in-95 duration-500">
-                    <div
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-32 h-32 mx-auto bg-gray-50 rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-100 hover:scale-105 transition-all shadow-xl shadow-primary/5 active:scale-95 group"
-                    >
-                        <FaImage className="text-4xl text-gray-300 group-hover:text-primary transition-colors" />
-                    </div>
+                {/* Handle */}
+                <div className="flex justify-center pt-3 pb-1">
+                    <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.18)' }} />
+                </div>
 
-                    <div>
-                        <h1 className="text-2xl font-black text-gray-900 tracking-tight mb-2">
-                            {isStory ? 'Add to Story' : 'Create New Post'}
-                        </h1>
-                        <p className="text-gray-500 text-sm">Drag photos and videos here</p>
-                    </div>
-
-                    <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full py-4 bg-primary text-white rounded-2xl font-bold text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"
-                    >
-                        Select from Device
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                    <button onClick={() => router.back()} className="p-2 rounded-xl transition-all active:scale-90" style={{ color: D.dim }}>
+                        <FaXmark className="text-lg" />
                     </button>
+                    <span className="font-bold text-base" style={{ color: D.bright }}>
+                        {isStory ? 'Add to Story' : 'Create a Post'}
+                    </span>
+                    <button
+                        onClick={handleSubmit}
+                        disabled={isUploading || (!caption.trim() && !file)}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95 disabled:opacity-40"
+                        style={{
+                            background: 'linear-gradient(135deg, #9B3FFF 0%, #6A00FF 100%)',
+                            color: '#fff',
+                            boxShadow: '0 4px 16px rgba(106,0,255,0.40)',
+                        }}
+                    >
+                        {isUploading ? (
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                            <>Post</>
+                        )}
+                    </button>
+                </div>
 
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*,video/*"
-                        onChange={handleFileChange}
-                        className="hidden"
+                {/* Author row */}
+                <div className="flex items-center gap-3 px-5 py-4">
+                    <div
+                        className="w-10 h-10 rounded-full overflow-hidden shrink-0"
+                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}
+                    >
+                        {identity?.avatar
+                            ? <img src={identity.avatar} alt="" className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center text-sm font-bold" style={{ color: D.dim }}>
+                                {identity?.username?.charAt(0)?.toUpperCase() || '?'}
+                            </div>
+                        }
+                    </div>
+                    <div>
+                        <p className="text-sm font-semibold" style={{ color: D.bright }}>{identity?.username || 'You'}</p>
+                        {/* Visibility picker */}
+                        <div className="flex items-center gap-2 mt-1">
+                            {[
+                                { id: 'public',      icon: <FaGlobe className="text-[10px]" />,      label: 'Public' },
+                                { id: 'connections', icon: <FaUserGroup className="text-[10px]" />,   label: 'Friends' },
+                            ].map(v => (
+                                <button
+                                    key={v.id}
+                                    onClick={() => setVisibility(v.id as any)}
+                                    className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all"
+                                    style={visibility === v.id ? {
+                                        background: D.purpleBg,
+                                        border: `1px solid ${D.purpleBorder}`,
+                                        color: D.purple,
+                                    } : {
+                                        background: 'rgba(255,255,255,0.05)',
+                                        border: '1px solid rgba(255,255,255,0.08)',
+                                        color: D.dim,
+                                    }}
+                                >
+                                    {v.icon} {v.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Caption textarea */}
+                <div className="px-5 pb-3">
+                    <textarea
+                        value={caption}
+                        onChange={e => setCaption(e.target.value)}
+                        placeholder="Share what's on your mind…"
+                        rows={4}
+                        autoFocus
+                        className="w-full resize-none outline-none text-sm leading-relaxed"
+                        style={{
+                            background: 'transparent',
+                            color: D.bright,
+                            caretColor: 'rgba(155,63,255,0.90)',
+                        }}
                     />
                 </div>
-            </div>
-        );
-    }
 
-    // --- STEP 2: COMPOSE ---
-    return (
-        <div className="min-h-screen bg-gray-50 md:flex md:items-center md:justify-center p-0 md:p-6">
-            <div className="w-full max-w-4xl bg-white md:rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-screen md:h-[600px] animate-in fade-in slide-in-from-bottom-5 duration-500">
-
-                {/* Visual Side (Left) */}
-                <div className="relative w-full md:w-[60%] bg-black flex items-center justify-center group">
-                    {previewUrl ? (
-                        file?.type.startsWith('video/') ? (
-                            <video src={previewUrl} className="max-w-full max-h-full object-contain" autoPlay muted loop />
-                        ) : (
-                            <img src={previewUrl} alt="Preview" className="max-w-full max-h-full object-contain" />
-                        )
-                    ) : (
-                        <div className="text-white">No Preview</div>
-                    )}
-
-                    <button
-                        onClick={clearFile}
-                        className="absolute top-4 left-4 p-3 bg-black/50 text-white rounded-full hover:bg-black/70 backdrop-blur-md z-10"
-                    >
-                        <FaArrowLeft />
-                    </button>
-                </div>
-
-                {/* Input Side (Right) */}
-                <div className="w-full md:w-[40%] flex flex-col bg-white border-l border-gray-100">
-                    {/* Header */}
-                    <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                        <span className="font-bold text-sm">New Post</span>
+                {/* Media preview */}
+                {previewUrl && (
+                    <div className="mx-5 mb-4 rounded-2xl overflow-hidden relative" style={{ maxHeight: 300 }}>
+                        {isVideo
+                            ? <video src={previewUrl} className="w-full h-full object-cover max-h-72" autoPlay muted loop />
+                            : <img src={previewUrl} alt="Preview" className="w-full h-auto max-h-72 object-cover" />
+                        }
                         <button
-                            onClick={handleSubmit}
-                            disabled={isUploading}
-                            className="text-sm font-bold text-primary hover:text-primary/80 disabled:opacity-50"
+                            onClick={() => { if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(null); setFile(null); }}
+                            className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center"
+                            style={{ background: 'rgba(0,0,0,0.55)', color: '#fff' }}
                         >
-                            {isUploading ? 'Sharing...' : 'Share'}
+                            <FaXmark className="text-xs" />
                         </button>
                     </div>
+                )}
 
-                    {/* Caption Input */}
-                    <div className="p-4 flex-1">
-                        <div className="flex space-x-3 items-start">
-                            <div className="w-8 h-8 bg-gray-100 rounded-full flex-shrink-0" />
-                            <textarea
-                                value={caption}
-                                onChange={(e) => setCaption(e.target.value)}
-                                placeholder="Write a caption..."
-                                className="w-full h-32 resize-none outline-none text-sm placeholder:text-gray-400 leading-relaxed"
-                                autoFocus
-                            />
+                {/* Non-image file pill */}
+                {file && !previewUrl && (
+                    <div className="mx-5 mb-4 flex items-center gap-3 px-4 py-3 rounded-2xl" style={{ ...G.medium }}>
+                        <FaFileLines style={{ color: D.purple }} />
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate" style={{ color: D.bright }}>{file.name}</p>
+                            <p className="text-xs" style={{ color: D.dim }}>{(file.size / 1024).toFixed(0)} KB</p>
                         </div>
+                        <button onClick={() => setFile(null)} style={{ color: D.dim }}>
+                            <FaXmark className="text-xs" />
+                        </button>
+                    </div>
+                )}
 
-                        <div className="h-px bg-gray-100 my-4" />
+                {/* Error */}
+                {error && (
+                    <div className="mx-5 mb-3 px-4 py-2.5 rounded-xl text-sm" style={{ background: 'rgba(255,80,80,0.12)', border: '1px solid rgba(255,80,80,0.25)', color: 'rgba(252,165,165,0.90)' }}>
+                        {error}
+                    </div>
+                )}
 
-                        {/* Settings */}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm text-gray-600">Add Location</span>
-                                <span className="text-xs text-gray-300">Coming soon</span>
-                            </div>
+                {/* Toolbar */}
+                <div
+                    className="flex items-center gap-2 px-5 py-3"
+                    style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}
+                >
+                    <input ref={fileInputRef} type="file" accept="image/*,video/*,application/pdf,.doc,.docx,.zip" className="hidden" onChange={handleFileChange} />
 
-                            <div className="flex flex-col space-y-2">
-                                <span className="text-sm text-gray-600">Visibility</span>
-                                <div className="flex space-x-2">
-                                    <button
-                                        onClick={() => setVisibility('public')}
-                                        className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold border transition-all flex items-center justify-center space-x-2 
-                                            ${visibility === 'public' ? 'border-primary text-primary bg-primary/5' : 'border-gray-200 text-gray-500'}`}
-                                    >
-                                        <FaGlobe /> <span>Public</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setVisibility('connections')}
-                                        className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold border transition-all flex items-center justify-center space-x-2
-                                            ${visibility === 'connections' ? 'border-primary text-primary bg-primary/5' : 'border-gray-200 text-gray-500'}`}
-                                    >
-                                        <FaUserGroup /> <span>Friends</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                    {[
+                        { icon: <FaImage />,     accept: 'image/*',  label: 'Photo' },
+                        { icon: <FaVideo />,     accept: 'video/*',  label: 'Video' },
+                        { icon: <FaFileLines />, accept: undefined,  label: 'File' },
+                    ].map(item => (
+                        <button
+                            key={item.label}
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all active:scale-90"
+                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: D.dim }}
+                        >
+                            {item.icon}
+                            <span className="hidden sm:inline">{item.label}</span>
+                        </button>
+                    ))}
+
+                    <div className="ml-auto">
+                        <span className="text-xs" style={{ color: caption.length > 450 ? 'rgba(252,165,165,0.80)' : D.dim }}>
+                            {500 - caption.length}
+                        </span>
                     </div>
                 </div>
             </div>
-
-            {error && (
-                <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-full text-sm font-bold shadow-xl animate-in fade-in slide-in-from-top-5">
-                    {error}
-                </div>
-            )}
         </div>
+    );
+}
+
+export default function CreatePage() {
+    return (
+        <Suspense>
+            <CreateContent />
+        </Suspense>
     );
 }
