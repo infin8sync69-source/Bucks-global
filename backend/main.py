@@ -53,6 +53,9 @@ rpc_client: Optional[IPFSRPCClient] = None
 social_dag: Optional[SocialDAG] = None
 discovery_hub: Optional[DiscoveryHub] = None
 
+# IPFS/P2P availability flag — set to False if background init fails
+ipfs_available: bool = False
+
 # Global notification queues for SSE
 notification_queues: Dict[str, asyncio.Queue] = {}
 
@@ -111,7 +114,7 @@ _raw_origins = os.getenv("ALLOWED_ORIGINS", "")
 ALLOWED_ORIGINS: list[str] = (
     [o.strip() for o in _raw_origins.split(",") if o.strip()]
     if _raw_origins
-    else ["*"]  # open during local development / when not set
+    else ["http://localhost:3000", "http://localhost:5173"]  # Safe defaults for local dev
 )
 ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX") or None
 
@@ -138,36 +141,40 @@ async def startup_event():
 
     # ── 2. IPFS / P2P (deferred to background so healthcheck passes fast) ────
     async def _start_ipfs():
-        global p2p_client, rpc_client, social_dag, discovery_hub
+        global p2p_client, rpc_client, social_dag, discovery_hub, ipfs_available
         rpc_host = os.getenv("IPFS_RPC_HOST", "http://127.0.0.1")
         rpc_port = _env_int("IPFS_RPC_PORT", 5001)
         try:
             rpc_client = IPFSRPCClient(host=rpc_host, port=rpc_port)
             social_dag = SocialDAG(rpc_client)
             discovery_hub = DiscoveryHub(rpc_client, social_dag, get_db_connection)
-            print(f"✅ IPFS RPC client ready at {rpc_host}:{rpc_port}")
+            logger.info(f"✅ IPFS RPC client ready at {rpc_host}:{rpc_port}")
         except Exception as e:
-            print(f"⚠️  IPFS RPC init failed (uploads/IPNS will be unavailable): {e}")
+            logger.error(f"❌ IPFS RPC init failed (uploads/IPNS will be unavailable): {e}")
+            ipfs_available = False
+            return  # P2P depends on IPFS — abort early
 
         try:
             p2p_client = P2PClient(IPFS_BIN)
             my_peer_id = await asyncio.to_thread(get_my_peer_id)
-            print(f"✅ P2P Node Identity: {my_peer_id}")
+            logger.info(f"✅ P2P Node Identity: {my_peer_id}")
 
             inbox_topic = f"/app/inbox/{my_peer_id}"
             await p2p_client.subscribe(inbox_topic, handle_inbox_message)
-            print(f"✅ Subscribed to P2P Inbox: {inbox_topic}")
+            logger.info(f"✅ Subscribed to P2P Inbox: {inbox_topic}")
 
             if discovery_hub:
                 await p2p_client.subscribe("/app/discovery", discovery_hub.handle_discovery_message)
                 await p2p_client.subscribe("/app/feed/updates", discovery_hub.handle_feed_update)
-                print("✅ Subscribed to global discovery topics")
+                logger.info("✅ Subscribed to global discovery topics")
 
             asyncio.create_task(periodic_heartbeat())
+            ipfs_available = True
+            logger.info("✅ IPFS/P2P stack fully initialised")
 
         except Exception as e:
-            print(f"⚠️  P2P/PubSub unavailable (real-time features disabled): {e}")
-            print("   → The REST API will still serve requests using the database.")
+            logger.error(f"❌ P2P/PubSub init failed (real-time features disabled): {e}")
+            ipfs_available = False
 
     # Fire-and-forget — server is ready to accept /health immediately after DB init
     asyncio.create_task(_start_ipfs())
@@ -229,6 +236,70 @@ def verify_signature(request: Request, secret: str = None) -> bool:
     except Exception as e:
         print(f"Auth error: {e}")
         return False
+
+# ==================== Auth & IPFS Decorators ====================
+
+from functools import wraps
+
+def require_auth(func):
+    """
+    Decorator that enforces Ed25519 DID-based request authentication.
+
+    Expects three HTTP headers on every protected request:
+      X-DID        — the caller's did:key identifier
+      X-Timestamp  — Unix timestamp in milliseconds (replay window: 5 min)
+      X-Signature  — base64-encoded Ed25519 signature over
+                     "<METHOD><path><timestamp>"
+
+    Returns HTTP 401 if any header is missing, the timestamp is outside the
+    replay window, or the signature does not verify against the DID's public key.
+    Failed attempts are logged at WARNING level with the remote address.
+    """
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        # Extract the Request object from positional or keyword args
+        request: Optional[Request] = kwargs.get("request")
+        if request is None:
+            for arg in args:
+                if isinstance(arg, Request):
+                    request = arg
+                    break
+
+        if request is None:
+            logger.warning("require_auth: no Request object found in handler args")
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        if not verify_signature(request):
+            client_host = request.client.host if request.client else "unknown"
+            did = request.headers.get("X-DID", "<no-did>")
+            logger.warning(
+                f"Auth failed: {request.method} {request.url.path} "
+                f"from {client_host} DID={did}"
+            )
+            raise HTTPException(status_code=401, detail="Unauthorized: invalid or missing signature")
+
+        return await func(*args, **kwargs)
+    return wrapper
+
+
+def require_ipfs(func):
+    """
+    Decorator that gates an endpoint behind IPFS/P2P availability.
+
+    Returns HTTP 503 Service Unavailable when the IPFS/P2P stack has not
+    successfully initialised (ipfs_available == False), so callers receive
+    an explicit error instead of a silent failure or an unrelated 500.
+    """
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        if not ipfs_available:
+            raise HTTPException(
+                status_code=503,
+                detail="IPFS/P2P service is unavailable. Please try again later."
+            )
+        return await func(*args, **kwargs)
+    return wrapper
+
 
 async def periodic_heartbeat():
     """Send a heartbeat to the discovery topic every minute."""
@@ -487,7 +558,12 @@ async def root():
 @app.get("/health")
 async def health():
     """Health-check for Railway / Render / uptime monitors."""
-    return {"status": "ok", "ipfs": rpc_client is not None, "p2p": p2p_client is not None}
+    return {
+        "status": "ok",
+        "ipfs": rpc_client is not None,
+        "p2p": p2p_client is not None,
+        "ipfs_available": ipfs_available,
+    }
 
 
 # ==================== User Identity / Profile / Sync ====================
@@ -500,7 +576,8 @@ class CreateUserReq(BaseModel):
     bio: str = ""
 
 @app.post("/api/users")
-async def create_user(body: CreateUserReq):
+@require_auth
+async def create_user(body: CreateUserReq, request: Request):
     """Register or update a user profile by DID + UUID7.
 
     Handles three conflict scenarios:
@@ -603,6 +680,7 @@ async def get_user_by_uuid7(uuid7: str):
 
 
 @app.post("/api/users/{uuid7}/sync")
+@require_auth
 async def sync_users(uuid7: str, request: Request):
     """Record a sync connection: from_uuid7 → uuid7 (target)."""
     body = await request.json()
@@ -629,6 +707,7 @@ async def sync_users(uuid7: str, request: Request):
 
 
 @app.delete("/api/users/{uuid7}/sync")
+@require_auth
 async def unsync_users(uuid7: str, request: Request):
     """Remove a sync connection."""
     my_did = get_current_did(request)
@@ -662,6 +741,7 @@ async def get_user_connections(uuid7: str):
     return {"connections": [dict(r) for r in rows], "count": len(rows)}
 
 @app.post("/api/auth/generate-identity")
+@require_ipfs
 async def generate_identity():
     """Generate a new P2P DID (did:key) and secret key"""
     try:
@@ -807,6 +887,7 @@ async def get_user_feed(peer_id: str, request: Request):
     return {"library": [], "count": 0}
 
 @app.post("/api/search")
+@require_auth
 async def search_library(request: Request):
     """Search library by metadata (title, description, author, filename) and Users"""
     body = await request.json()
@@ -882,7 +963,8 @@ async def get_post(cid: str):
 
 
 @app.delete("/api/library/{cid}")
-async def delete_post(cid: str):
+@require_auth
+async def delete_post(cid: str, request: Request):
     """Delete a post from library by CID"""
     conn = get_db_connection()
     c = conn.cursor()
@@ -904,7 +986,8 @@ async def delete_post(cid: str):
     return {"success": True, "message": "Post deleted"}
 
 @app.put("/api/library/{cid}")
-async def update_post(cid: str, title: str = Form(...), description: str = Form(...)):
+@require_auth
+async def update_post(cid: str, title: str = Form(...), description: str = Form(...), request: Request = None):
     """Update post title and description"""
     conn = get_db_connection()
     c = conn.cursor()
@@ -925,6 +1008,8 @@ async def update_post(cid: str, title: str = Form(...), description: str = Form(
     return {"success": True, "post": dict(post)}
 
 @app.post("/api/upload")
+@require_auth
+@require_ipfs
 async def upload_file(
     request: Request,
     file: UploadFile = File(...),
@@ -1143,6 +1228,8 @@ class RegisterContentReq(BaseModel):
     thumbnail_cid: Optional[str] = None
 
 @app.post("/api/register_content")
+@require_auth
+@require_ipfs
 async def register_content(request: Request, body: RegisterContentReq):
     """Register pre-pinned content from the native browser node into the DB and DAG"""
     did = get_current_did(request)
@@ -1304,6 +1391,7 @@ async def get_post_interactions(cid: str, request: Request):
     }
 
 @app.post("/api/interactions/{cid}/like")
+@require_auth
 async def toggle_like(cid: str, request: Request):
     """Toggle like for a post"""
     peer_id = get_current_did(request)
@@ -1346,6 +1434,7 @@ async def toggle_like(cid: str, request: Request):
     }
 
 @app.post("/api/interactions/{cid}/dislike")
+@require_auth
 async def toggle_dislike(cid: str, request: Request):
     """Toggle dislike for a post"""
     peer_id = get_current_did(request)
@@ -1385,6 +1474,7 @@ async def toggle_dislike(cid: str, request: Request):
     }
 
 @app.post("/api/interactions/{cid}/comment")
+@require_auth
 async def add_comment(cid: str, comment: Comment, request: Request):
     """Add comment to a post"""
     peer_id = get_current_did(request)
@@ -1406,7 +1496,8 @@ async def add_comment(cid: str, comment: Comment, request: Request):
     return {"success": True, "comment": comment.text}
 
 @app.delete("/api/interactions/{cid}/comment/{index}")
-async def delete_comment(cid: str, index: int):
+@require_auth
+async def delete_comment(cid: str, index: int, request: Request = None):
     """Delete comment from a post by index (legacy support)"""
     conn = get_db_connection()
     # Fetch all comments for this post ordered by timestamp
@@ -1518,6 +1609,8 @@ async def fetch_peer_library(library_cid: str) -> List[Dict]:
     return res if isinstance(res, list) else []
 
 @app.post("/api/follow/{peer_id}")
+@require_auth
+@require_ipfs
 async def follow_peer(peer_id: str, request: Request, relationship_type: str = "sync"):
     """Follow an IPFS peer and sync their manifest"""
     try:
@@ -1582,6 +1675,7 @@ async def follow_peer(peer_id: str, request: Request, relationship_type: str = "
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/unfollow/{peer_id}")
+@require_auth
 async def unfollow_peer(peer_id: str, request: Request):
     """Unfollow a peer"""
     my_peer_id = get_current_did(request)
@@ -1632,6 +1726,7 @@ async def discover_peers():
         return {"error": str(e), "peers": []}
 
 @app.post("/api/connections/request")
+@require_auth
 async def send_connection_request(request: Request, peer_id: str = Form(...)):
     """Send a connection request to another peer"""
     did = get_current_did(request)
@@ -1656,6 +1751,7 @@ async def send_connection_request(request: Request, peer_id: str = Form(...)):
     return {"success": True, "message": "Connection request sent"}
 
 @app.post("/api/connections/accept")
+@require_auth
 async def accept_connection_request(request: Request, peer_id: str = Form(...)):
     """Accept an incoming connection request"""
     did = get_current_did(request)
@@ -1705,6 +1801,8 @@ async def get_following(request: Request):
     return {"following": following_list, "count": len(following_list)}
 
 @app.post("/api/sync-peers")
+@require_auth
+@require_ipfs
 async def sync_peers(request: Request):
     """Manually sync content from all followed peers and their network (Hierarchy)"""
     my_peer_id = get_current_did(request)
@@ -2051,7 +2149,8 @@ async def get_notifications(request: Request):
     return {"notifications": [dict(r) for r in rows]}
 
 @app.post("/api/notifications/{notif_id}/read")
-async def mark_notification_read(notif_id: int):
+@require_auth
+async def mark_notification_read(notif_id: int, request: Request = None):
     """Mark a notification as read"""
     conn = get_db_connection()
     conn.execute("UPDATE notifications SET is_read = 1 WHERE id = ?", (notif_id,))
@@ -2060,6 +2159,7 @@ async def mark_notification_read(notif_id: int):
     return {"success": True}
 
 @app.post("/api/notifications/read-all")
+@require_auth
 async def mark_all_notifications_read(request: Request):
     """Mark all notifications as read"""
     did = get_current_did(request)
@@ -2224,6 +2324,8 @@ async def get_chat_history(peer_id: str, request: Request, limit: int = 50, offs
         raise HTTPException(status_code=500, detail="Failed to fetch chat history")
 
 @app.post("/api/messages/{peer_id}")
+@require_auth
+@require_ipfs
 async def send_message(peer_id: str, body: dict, request: Request):
     """Send a message to a peer"""
     my_peer_id = get_current_did(request)
@@ -2373,6 +2475,8 @@ async def handle_inbox_message(data: dict):
         print(f"Error handling P2P message: {e}")
 
 @app.post("/api/messages/send")
+@require_auth
+@require_ipfs
 async def send_direct_message(
     peer_id: str = Form(...),
     text: str = Form(""),
@@ -2500,6 +2604,7 @@ async def send_direct_message(
         raise HTTPException(status_code=500, detail="Failed to send message")
 
 @app.post("/api/contacts/add")
+@require_auth
 async def add_contact(did: str = Form(...), request: Request = None):
     """
     Add a new contact by DID.
@@ -2569,6 +2674,7 @@ async def get_profile(request: Request):
 # REMOVED: Duplicate endpoint - use L2133 version instead
 
 @app.post("/api/profile")
+@require_auth
 async def update_profile_endpoint(
     request: Request,
     username: str = Form(None),
@@ -2686,6 +2792,7 @@ async def get_guardians(request: Request):
     return {"guardians": [g["guardian_peer_id"] for g in guardians]}
 
 @app.post("/api/guardians/add")
+@require_auth
 async def add_guardian(peer_id: str = Form(...), request: Request = None):
     """Add a guardian (max 7)"""
     my_peer_id = get_current_did(request) if request else get_my_peer_id()
@@ -2717,6 +2824,7 @@ async def add_guardian(peer_id: str = Form(...), request: Request = None):
 # --- Standard SSSS Recovery Endpoints ---
 
 @app.post("/api/recovery/setup")
+@require_auth
 async def setup_recovery(threshold: int = Form(3), shares: int = Form(5), request: Request = None):
     """
     Generate SSSS shards for the current user's secret key.
@@ -3050,6 +3158,7 @@ class ChatMessageBody(BaseModel):
 
 
 @app.post("/api/chat/{peer_uuid7}/send")
+@require_auth
 async def chat_send(peer_uuid7: str, body: ChatMessageBody, request: Request):
     """Send a text message. Mutual sync required."""
     my_uuid7 = get_chat_uuid7(request)
