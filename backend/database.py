@@ -78,6 +78,9 @@ class CompatConnection:
     def commit(self):
         return self._conn.commit()
 
+    def rollback(self):
+        return self._conn.rollback()
+
     def close(self):
         return self._conn.close()
 
@@ -131,6 +134,13 @@ def get_db_connection() -> CompatConnection:
 
 def init_db():
     conn = get_db_connection()
+    try:
+        _init_db_inner(conn)
+    finally:
+        conn.close()
+
+
+def _init_db_inner(conn: CompatConnection):
     c = conn.cursor()
     
     if not conn._is_postgres:
@@ -378,15 +388,23 @@ def init_db():
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} {coltype}")
                 conn.commit()  # commit each migration so subsequent ones see the column
             except Exception:
+                conn.rollback()  # reset aborted transaction before next statement
                 pass  # column already exists — fine
-        
+
         # Add media_type to posts table for both SQLite and Postgres
         try:
             c.execute("ALTER TABLE posts ADD COLUMN media_type TEXT DEFAULT 'file'")
             conn.commit()
         except Exception:
+            conn.rollback()  # reset aborted transaction before next statement
             pass  # column already exists — fine
-        c.execute("CREATE INDEX IF NOT EXISTS idx_users_uuid7 ON users(uuid7);")
+
+        # Safe to create index now — transaction is clean regardless of migration outcome
+        try:
+            c.execute("CREATE INDEX IF NOT EXISTS idx_users_uuid7 ON users(uuid7);")
+            conn.commit()
+        except Exception:
+            conn.rollback()  # index may already exist in some edge cases
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS connections (
@@ -515,10 +533,10 @@ def init_db():
                 c.execute(f"ALTER TABLE messages ADD COLUMN {col} {coltype}")
                 conn.commit()
             except Exception:
+                conn.rollback()  # reset aborted transaction before next statement
                 pass  # column already exists — fine
 
     conn.commit()
-    conn.close()
     location = _get_database_url() if conn._is_postgres else DB_PATH
     print(f"✅ Database initialized at {location}")
 
