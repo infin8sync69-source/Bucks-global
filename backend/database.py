@@ -78,22 +78,54 @@ class CompatConnection:
     def commit(self):
         return self._conn.commit()
 
+    def rollback(self):
+        return self._conn.rollback()
+
     def close(self):
         return self._conn.close()
+
+
+class _CompatRow(dict):
+    """
+    Row that quacks like sqlite3.Row: supports both r["col"] and r[0].
+    Also iterable as a plain dict (for dict(r), r.keys(), r.items()).
+    This lets the same handler code run against SQLite *or* Postgres
+    without every call site remembering which driver it's talking to.
+    """
+    __slots__ = ("_values",)
+
+    def __init__(self, pairs, values):
+        super().__init__(pairs)
+        object.__setattr__(self, "_values", tuple(values))
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._values[key]
+        return super().__getitem__(key)
+
+
+def _compat_row_factory(cursor):
+    """psycopg3 row_factory that returns _CompatRow instances."""
+    desc = cursor.description
+    if desc is None:
+        return lambda values: values
+    names = [d.name for d in desc]
+    def make(values):
+        return _CompatRow(zip(names, values), values)
+    return make
 
 
 def get_db_connection() -> CompatConnection:
     database_url = _get_database_url()
     if database_url and _is_postgres_url(database_url):
         try:
-            import psycopg
-            from psycopg.rows import dict_row
+            import psycopg  # noqa: F401
         except Exception as e:
             raise RuntimeError(
                 "Postgres configured via DATABASE_URL/SUPABASE_DB_URL, but psycopg is not installed."
             ) from e
 
-        conn = psycopg.connect(database_url, row_factory=dict_row, connect_timeout=10)
+        conn = psycopg.connect(database_url, row_factory=_compat_row_factory, connect_timeout=10)
         return CompatConnection(conn, True)
 
     conn = sqlite3.connect(DB_PATH)
@@ -102,6 +134,13 @@ def get_db_connection() -> CompatConnection:
 
 def init_db():
     conn = get_db_connection()
+    try:
+        _init_db_inner(conn)
+    finally:
+        conn.close()
+
+
+def _init_db_inner(conn: CompatConnection):
     c = conn.cursor()
     
     if not conn._is_postgres:
@@ -349,15 +388,23 @@ def init_db():
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} {coltype}")
                 conn.commit()  # commit each migration so subsequent ones see the column
             except Exception:
+                conn.rollback()  # reset aborted transaction before next statement
                 pass  # column already exists — fine
-        
+
         # Add media_type to posts table for both SQLite and Postgres
         try:
             c.execute("ALTER TABLE posts ADD COLUMN media_type TEXT DEFAULT 'file'")
             conn.commit()
         except Exception:
+            conn.rollback()  # reset aborted transaction before next statement
             pass  # column already exists — fine
-        c.execute("CREATE INDEX IF NOT EXISTS idx_users_uuid7 ON users(uuid7);")
+
+        # Safe to create index now — transaction is clean regardless of migration outcome
+        try:
+            c.execute("CREATE INDEX IF NOT EXISTS idx_users_uuid7 ON users(uuid7);")
+            conn.commit()
+        except Exception:
+            conn.rollback()  # index may already exist in some edge cases
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS connections (
@@ -486,10 +533,10 @@ def init_db():
                 c.execute(f"ALTER TABLE messages ADD COLUMN {col} {coltype}")
                 conn.commit()
             except Exception:
+                conn.rollback()  # reset aborted transaction before next statement
                 pass  # column already exists — fine
 
     conn.commit()
-    conn.close()
     location = _get_database_url() if conn._is_postgres else DB_PATH
     print(f"✅ Database initialized at {location}")
 

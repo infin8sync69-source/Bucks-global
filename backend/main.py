@@ -104,16 +104,21 @@ app = FastAPI(
 # CORS configuration
 # In production, restrict to your frontend domain via ALLOWED_ORIGINS env var.
 # Example: ALLOWED_ORIGINS=https://bucks.global,https://www.bucks.global
+# For Vercel preview deploys (hashed subdomains change per commit), set
+# ALLOWED_ORIGIN_REGEX to a Python regex, e.g.
+# ALLOWED_ORIGIN_REGEX=https://.*\\.vercel\\.app
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "")
 ALLOWED_ORIGINS: list[str] = (
     [o.strip() for o in _raw_origins.split(",") if o.strip()]
     if _raw_origins
     else ["*"]  # open during local development / when not set
 )
+ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX") or None
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

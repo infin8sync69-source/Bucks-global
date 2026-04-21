@@ -22,7 +22,7 @@ const D = {
     upBg: 'rgba(52,211,153,0.12)',
     down: 'rgba(252,165,165,0.90)',  // rose
     downBg: 'rgba(248,113,113,0.12)',
-    purple: 'rgba(155,63,255,0.80)',
+    accent: 'rgba(255,255,255,0.70)',
 };
 
 const EngagementBar = ({

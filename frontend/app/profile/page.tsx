@@ -477,7 +477,7 @@ export default function OwnProfilePage() {
                                         {hashtags.length > 0 && (
                                             <div className="flex flex-wrap gap-2 mt-2">
                                                 {hashtags.map((tag, idx) => (
-                                                    <span key={idx} className="text-xs px-2.5 py-1 rounded-full" style={{ background: 'rgba(155,63,255,0.20)', color: 'rgba(200,100,255,1)' }}>
+                                                    <span key={idx} className="text-xs px-2.5 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.70)' }}>
                                                         {tag}
                                                     </span>
                                                 ))}

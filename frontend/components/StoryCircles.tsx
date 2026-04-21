@@ -154,7 +154,7 @@ export default function StoryCircles({ library }: StoryCirclesProps) {
                         </div>
                         <span
                             className="text-xs font-bold px-2 py-0.5 rounded-full"
-                            style={{ ...G.btn, color: "#6A00FF", fontSize: 10 }}
+                            style={{ ...G.btn, color: "rgba(255,255,255,0.60)", fontSize: 10 }}
                         >Your Story</span>
                     </button>
                 ) : (
@@ -162,7 +162,7 @@ export default function StoryCircles({ library }: StoryCirclesProps) {
                         <div className="w-16 h-16 rounded-full p-[2px] relative">
                             <div
                                 className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"
-                                style={{ ...G.light, border: "2px dashed rgba(106,0,255,0.35)" }}
+                                style={{ ...G.light, border: "2px dashed rgba(255,255,255,0.18)" }}
                             >
                                 <Avatar seed="me" size="lg" className="opacity-50" />
                             </div>
@@ -172,7 +172,7 @@ export default function StoryCircles({ library }: StoryCirclesProps) {
                         </div>
                         <span
                             className="text-xs font-bold px-2 py-0.5 rounded-full"
-                            style={{ ...G.btn, color: "#6A00FF", fontSize: 10 }}
+                            style={{ ...G.btn, color: "rgba(255,255,255,0.60)", fontSize: 10 }}
                         >Your Story</span>
                     </Link>
                 )}
@@ -201,7 +201,7 @@ export default function StoryCircles({ library }: StoryCirclesProps) {
                             </div>
                             <span
                                 className="text-xs font-bold w-16 truncate text-center px-1 py-0.5 rounded-full"
-                                style={{ ...G.btn, color: "#6A00FF", fontSize: 10 }}
+                                style={{ ...G.btn, color: "rgba(255,255,255,0.60)", fontSize: 10 }}
                             >{author}</span>
                         </button>
                     ))}

@@ -36,12 +36,11 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             {/* Hide sidebar completely on full-screen pages */}
             {!isFullScreen && <Sidebar />}
 
-            {/* Main Content Area */}
-            {/*
-                - Mobile: pb-20 to clear the BottomNav (hidden on full-screen pages)
-                - Desktop: pl-64 (Sidebar width) ONLY if not full-screen
-            */}
-            <div className={`transition-all duration-300 ${!isFullScreen ? 'md:pl-64' : ''}`}>
+            {/* Main Content Area
+                Sidebar now lives behind a hamburger at every breakpoint, so the
+                content no longer needs a fixed left column. Just center the feed
+                column and leave room at the bottom for the mobile BottomNav. */}
+            <div className="transition-all duration-300">
                 <div className="flex justify-center min-h-screen">
                     <main className={`w-full min-h-screen ${!isFullScreen ? 'md:max-w-2xl pb-20 md:pb-0' : ''}`}>
                         <div key={pathname} className="animate-in fade-in zoom-in-95 duration-300">

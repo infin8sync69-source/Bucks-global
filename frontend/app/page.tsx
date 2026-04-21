@@ -1,9 +1,3 @@
-"use client";
-
-import dynamic from 'next/dynamic';
-
-const GlobeHome = dynamic(() => import('@/components/GlobeHome'), { ssr: false });
-
-export default function Home() {
-    return <GlobeHome />;
-}
+// Home route: Feed.
+// Globe moved to /explore.
+export { default } from './feed/page';
