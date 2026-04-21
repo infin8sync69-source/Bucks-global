@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
     FaMagnifyingGlass,
+    FaHouse,
+    FaRegCompass,
     FaUser,
     FaRegUser,
     FaMessage,
@@ -39,6 +41,16 @@ const Sidebar = () => {
     }, []);
 
     const navItems = [
+        {
+            label: 'Home',
+            icon: <FaHouse />,
+            href: '/',
+        },
+        {
+            label: 'Explore',
+            icon: <FaRegCompass />,
+            href: '/explore',
+        },
         {
             label: 'Search',
             icon: <FaMagnifyingGlass />,
@@ -180,45 +192,42 @@ const Sidebar = () => {
         );
     };
 
+    // One pattern for every breakpoint: sidebar lives behind a hamburger drawer.
+    // This keeps the feed/globe free of a permanent 15rem left column and mirrors
+    // the mobile affordance desktop users already recognize (Gmail, YouTube, etc).
     return (
         <>
-            {/* Mobile hamburger */}
-            <div className="md:hidden">
-                <button
-                    onClick={() => setIsDrawerOpen(true)}
-                    className="fixed top-3 left-4 z-[100] p-2 rounded-xl transition-all relative"
-                    style={{
-                        background: 'rgba(255,255,255,0.07)',
-                        backdropFilter: 'blur(16px)',
-                        WebkitBackdropFilter: 'blur(16px)',
-                        border: '1px solid rgba(255,255,255,0.12)',
-                        color: 'rgba(255,255,255,0.70)',
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.40)',
-                    }}
-                >
-                    <FaBars className="text-xl" />
-                    {unread > 0 && (
-                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center"
-                            style={{ background: 'rgba(255,255,255,0.20)', color: 'rgba(255,255,255,0.90)', border: '1px solid rgba(255,255,255,0.25)' }}>
-                            {unread > 9 ? '9+' : unread}
-                        </span>
-                    )}
-                </button>
-
-                {isDrawerOpen && (
-                    <div className="fixed inset-0 z-[110]">
-                        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsDrawerOpen(false)} />
-                        <div className="absolute inset-y-0 left-0 w-72 shadow-2xl animate-in slide-in-from-left duration-300">
-                            <SidebarContent />
-                        </div>
-                    </div>
+            <button
+                onClick={() => setIsDrawerOpen(true)}
+                aria-label="Open navigation"
+                className="fixed top-3 left-4 md:top-5 md:left-5 z-[100] p-2 rounded-xl transition-all"
+                style={{
+                    background: 'rgba(255,255,255,0.07)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    color: 'rgba(255,255,255,0.70)',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.40)',
+                    position: 'fixed',
+                }}
+            >
+                <FaBars className="text-xl" />
+                {unread > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center"
+                        style={{ background: 'rgba(255,255,255,0.20)', color: 'rgba(255,255,255,0.90)', border: '1px solid rgba(255,255,255,0.25)' }}>
+                        {unread > 9 ? '9+' : unread}
+                    </span>
                 )}
-            </div>
+            </button>
 
-            {/* Desktop sidebar */}
-            <div className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 w-60 z-50">
-                <SidebarContent />
-            </div>
+            {isDrawerOpen && (
+                <div className="fixed inset-0 z-[110]">
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsDrawerOpen(false)} />
+                    <div className="absolute inset-y-0 left-0 w-72 shadow-2xl animate-in slide-in-from-left duration-300">
+                        <SidebarContent />
+                    </div>
+                </div>
+            )}
         </>
     );
 };

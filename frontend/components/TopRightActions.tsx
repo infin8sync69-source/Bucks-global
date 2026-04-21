@@ -7,9 +7,6 @@ import { usePathname } from 'next/navigation';
 import { G } from '@/components/ui/Glass';
 
 const TopRightActions = () => {
-    const pathname = usePathname();
-    const isHome = pathname === '/';
-
     const glassIconStyle: React.CSSProperties = {
         ...G.btn,
         display: "flex",
@@ -23,10 +20,9 @@ const TopRightActions = () => {
         position: "relative",
     };
 
+    // Mobile keeps the shortcuts inside BottomNav — show on md+ only.
     return (
-        <div className={`fixed top-4 right-4 md:top-6 md:right-6 z-[60] items-center space-x-2
-            ${isHome ? 'flex' : 'hidden md:flex'}
-        `}>
+        <div className="fixed top-4 right-4 md:top-6 md:right-6 z-[60] items-center space-x-2 hidden md:flex">
             {/* Search */}
             <Link href="/search" style={glassIconStyle}>
                 <FaMagnifyingGlass className="text-sm" />

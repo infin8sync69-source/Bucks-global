@@ -17,7 +17,7 @@ export default function FloatingCreateButton() {
     return (
         <Link
             href="/create"
-            className="fixed bottom-24 right-6 md:bottom-8 md:right-8 z-40 flex items-center justify-center w-16 h-16 rounded-full text-white text-2xl shadow-2xl transition-all active:scale-90 hover:scale-110"
+            className="fixed bottom-24 right-6 md:bottom-8 md:right-8 z-[55] flex items-center justify-center w-16 h-16 rounded-full text-white text-2xl shadow-2xl transition-all active:scale-90 hover:scale-110"
             style={{
                 background: 'linear-gradient(145deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 100%)',
                 border: '1px solid rgba(255,255,255,0.26)',

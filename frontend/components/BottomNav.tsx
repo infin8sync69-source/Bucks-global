@@ -16,7 +16,7 @@ const ACTIVE_GLOW = 'drop-shadow(0 0 7px rgba(255,255,255,0.40))';
 const DIM     = 'rgba(255,255,255,0.36)';
 
 const tabs = [
-    { label: 'Feed',     href: '/feed',     icon: <FaHouse />,       activeIcon: <FaHouse /> },
+    { label: 'Home',     href: '/',         icon: <FaHouse />,       activeIcon: <FaHouse /> },
     { label: 'Search',   href: '/search',   icon: <FaMagnifyingGlass />, activeIcon: <FaMagnifyingGlass /> },
     { label: 'Create',   href: '/create',   icon: null,              isCta: true },
     { label: 'Messages', href: '/messages', icon: <FaRegMessage />,  activeIcon: <FaMessage /> },
@@ -54,7 +54,7 @@ export default function BottomNav() {
                 {tabs.map((tab: any) => {
                     const isActive =
                         pathname === tab.href ||
-                        (tab.href !== '/feed' && pathname.startsWith(tab.href + '/'));
+                        (tab.href !== '/' && pathname.startsWith(tab.href + '/'));
                     const badgeCount = tab.href === '/messages' && unread > 0 ? unread : 0;
 
                     /* Centre CTA — liquid glass pill */
